@@ -1,0 +1,602 @@
+/* pile/styles.css — schematic-centric control-room layout for the reactor
+   simulator. Chrome (toolbar, glass panels, sliders, mode-toggles, ghost
+   buttons, sparklines, toasts, a11y) comes from shared-base.css; this file
+   carries the pile-specific layout: left rail, plant schematic stage,
+   component inspector dock, right rail. */
+
+:root {
+  --rail-l: 264px;
+  --rail-r: 280px;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+}
+
+/* ─── Three-column control board ──────────────────────────────────── */
+#main {
+  display: grid;
+  grid-template-columns: var(--rail-l) 1fr var(--rail-r);
+  grid-template-rows: 1fr;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: calc(12px + var(--toolbar-h) + 12px) 12px 12px;
+}
+
+/* ─── Rails ────────────────────────────────────────────────────────── */
+.rail {
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+}
+#rail-left,
+#rail-right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px;
+  gap: 10px;
+}
+
+.rail-section { flex-shrink: 0; }
+
+.rail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 2px;
+}
+
+.reactor-type-row .mode-btn {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 8px 12px;
+}
+
+#g-reactor-type {
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.06em;
+}
+
+.rail-canvas-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#axial-canvas {
+  width: 100%;
+  height: 200px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  display: block;
+}
+#reactivity-stack {
+  width: 100%;
+  height: 170px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  display: block;
+}
+
+/* ─── Plant schematic stage ────────────────────────────────────────── */
+#stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+#schematic {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  font-family: var(--font-sans);
+}
+#schematic.grabbing { cursor: grabbing; }
+
+#schematic-hint {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  margin: 0;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+#zoom-controls {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  border-radius: var(--radius);
+}
+#zoom-controls .tool-btn {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+#zoom-pct {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  min-width: 42px;
+  text-align: center;
+}
+
+/* ─── Schematic SVG elements ───────────────────────────────────────── */
+.sch-zone {
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+  stroke-dasharray: 9 7;
+  opacity: 0.4;
+}
+.sch-zone-partial { stroke-dasharray: 5 6; }
+.sch-zone-label {
+  fill: var(--text-secondary);
+  font-size: 17px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.sch-pipe {
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: butt;
+  stroke-linejoin: round;
+}
+.sch-pipe-hot          { stroke: var(--coolant-hot); }
+.sch-pipe-cold         { stroke: var(--coolant-cold); }
+.sch-pipe-steam        { stroke: var(--steam); }
+.sch-pipe-feed         { stroke: color-mix(in srgb, var(--coolant-cold) 80%, var(--text)); }
+.sch-pipe-intermediate { stroke: var(--coolant-hot); }
+.sch-pipe-elec         { stroke: var(--neutron); stroke-dasharray: 3 5; }
+.sch-flow { stroke-dasharray: 11 8; }
+
+.sch-comp { cursor: pointer; }
+.sch-shape {
+  fill: var(--bg-hover);
+  stroke: var(--text);
+  stroke-width: 2;
+  transition: stroke 0.15s var(--ease-out), filter 0.15s var(--ease-out);
+}
+.sch-comp:hover .sch-shape {
+  stroke: var(--accent);
+  filter: brightness(1.08);
+}
+.sch-comp.selected .sch-shape {
+  stroke: var(--accent);
+  stroke-width: 4;
+}
+.sch-comp.alarm .sch-shape {
+  stroke: var(--scram);
+  stroke-width: 4;
+  animation: sch-pulse 1s var(--ease-in-out) infinite;
+}
+@keyframes sch-pulse {
+  0%, 100% { stroke-opacity: 1; }
+  50%      { stroke-opacity: 0.35; }
+}
+
+.sch-label {
+  fill: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.sch-sub {
+  fill: var(--text-secondary);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.sch-readout {
+  fill: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.sch-core-cell { stroke: none; }
+.sch-shape-core { fill: var(--bg); }
+.sch-comp.alarm .sch-readout { fill: var(--scram); }
+
+/* ─── Component inspector dock — centred modal panel ───────────────── */
+#inspector {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 200;
+  width: min(640px, calc(100vw - 48px));
+  max-height: 86vh;
+  display: none;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-hover);
+}
+#inspector.open { display: flex; }
+/* Faint scrim so the centred inspector reads as a focused modal. */
+#inspector.open::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 50%, transparent);
+}
+
+.insp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 8px 10px 14px;
+  background: var(--bg-panel-solid, var(--bg-elevated));
+  flex-shrink: 0;
+}
+.insp-title {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--font-base);
+  letter-spacing: 0.04em;
+}
+
+.insp-body {
+  overflow-y: auto;
+  padding: 10px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.insp-group {
+  font-family: var(--font-sans);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  padding-bottom: 3px;
+}
+.insp-group:first-child { margin-top: 0; }
+
+.insp-note {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+}
+
+.insp-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--font-sm);
+}
+.insp-label { color: var(--text-secondary); }
+.insp-val {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+}
+
+.insp-bar-row { align-items: center; }
+.insp-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-hover);
+  border-radius: var(--radius);
+  overflow: hidden;
+  max-width: 60%;
+}
+.insp-bar-fill {
+  height: 100%;
+  background: var(--text-secondary);
+  transition: width 0.25s var(--ease-out);
+}
+
+.insp-ctrl {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.insp-ctrl-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+.insp-ctrl-val {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.insp-ctrl input[type="range"] { width: 100%; }
+.insp-ctrl-locked { opacity: 0.6; }
+.insp-ctrl-locked input[type="range"] { cursor: not-allowed; }
+
+.insp-tog {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.insp-modegroup { width: 100%; }
+.insp-modegroup .mode-btn.active {
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border-radius: var(--radius);
+}
+
+.insp-tog-label { color: var(--text); }
+.insp-close { font-size: 0.85rem; }
+
+.insp-btn {
+  width: 100%;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  min-height: 32px;
+}
+.insp-btn.active {
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-hover));
+  color: var(--accent);
+  outline: 1px solid var(--accent);
+}
+.insp-btn-danger.active {
+  background: color-mix(in srgb, var(--scram) 20%, var(--bg-hover));
+  color: var(--scram);
+  outline-color: var(--scram);
+}
+
+/* ─── SCRAM action (left rail footer) ──────────────────────────────── */
+button.scram-action {
+  width: 100%;
+  flex-shrink: 0;
+  padding: 12px 16px;
+  background: var(--scram);
+  color: var(--text-on-accent, #fff);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: filter 0.2s var(--ease-out), transform 0.15s var(--ease-out);
+}
+button.scram-action:hover { filter: brightness(1.1); transform: translateY(-1px); }
+button.scram-action:active { filter: brightness(0.9); transform: scale(0.98); }
+button.scram-action.flash { animation: scram-flash 0.3s var(--ease-out); }
+@keyframes scram-flash {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* ─── Trip annunciator grid ────────────────────────────────────────── */
+.trip-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+#annunciator-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+.annunciator-cell {
+  background: var(--annunciator-off, var(--bg-hover));
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  padding: 7px 4px;
+  border-radius: var(--radius);
+  text-transform: uppercase;
+  font-weight: 600;
+  transition: background 0.2s var(--ease-out), color 0.2s var(--ease-out);
+}
+.annunciator-cell.tripped {
+  background: var(--annunciator-trip, var(--scram));
+  color: var(--text-on-accent, #fff);
+}
+.annunciator-cell.tripped.blink { background: var(--annunciator-warn, #f80); }
+.annunciator-cell.bypassed { opacity: 0.4; }
+
+/* ─── Sparkline trend strips ───────────────────────────────────────── */
+.strip-card {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  min-width: 0;
+  height: 84px;
+}
+.strip-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: var(--font-sm);
+  margin-bottom: 4px;
+}
+.strip-label {
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+.strip-value {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.strip-canvas {
+  flex: 1;
+  width: 100%;
+  display: block;
+}
+
+/* ─── Responsive — schematic stays usable; rails collapse below ────── */
+@media (max-width: 1180px) {
+  :root { --rail-l: 232px; --rail-r: 244px; }
+}
+@media (max-width: 900px) {
+  #main {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    overflow-y: auto;
+  }
+  #rail-left, #rail-right { max-height: 320px; }
+  #stage { min-height: 420px; }
+}
+
+/* ─── Guided scenarios (overlay + objectives HUD) ──────────────────── */
+.scenario-overlay-panel {
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-hover);
+}
+.scenario-overlay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.2rem;
+  background: var(--bg);
+}
+.scenario-overlay-title {
+  margin: 0;
+  font-size: var(--font-lg);
+  font-weight: 600;
+}
+.scenario-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin-top: 0.6rem;
+}
+.scenario-card {
+  padding: 0.8rem 0.9rem;
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+.scenario-card-title {
+  margin: 0 0 0.3rem;
+  font-size: var(--font-base);
+  font-weight: 600;
+}
+.scenario-card-summary {
+  margin: 0 0 0.65rem;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.scenario-start-btn { width: 100%; }
+
+.scenario-hud {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 400;
+  width: 300px;
+  max-width: calc(100vw - 2rem);
+  max-height: 68vh;
+  overflow-y: auto;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius);
+  -webkit-overflow-scrolling: touch;
+}
+.scenario-hud[hidden] { display: none; }
+.scenario-hud-title {
+  margin-bottom: 0.4rem;
+  font-size: var(--font-base);
+  font-weight: 600;
+}
+.scenario-hud-intro {
+  margin: 0 0 0.7rem;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.scenario-hud-objs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+}
+.scenario-obj {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: var(--font-sm);
+}
+.scenario-obj-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-top: 0.18rem;
+  border-radius: var(--radius);
+  background: var(--text-secondary);
+  opacity: 0.35;
+  transition: background 0.2s var(--ease-out), opacity 0.2s var(--ease-out);
+}
+.scenario-obj-dot.met { background: var(--gamma); opacity: 1; }
+.scenario-obj-text {
+  line-height: 1.45;
+  color: var(--text-secondary);
+  transition: color 0.2s var(--ease-out);
+}
+.scenario-obj.met .scenario-obj-text { color: var(--text); }
+.scenario-status {
+  padding: 0.35rem 0;
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+.scenario-status.complete { color: var(--gamma); }
+.scenario-status.failed {
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--scram);
+}
+.scenario-hud-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.scenario-hud-btn { flex: 1; }

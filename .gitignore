@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Claude Code
+.claude/
+
+# Playwright MCP
+.playwright-mcp/
+
+# Superpowers
+.superpowers/
+
+# Worktrees
+.worktrees/
+
+# Dev artifacts (handoff notes, throwaway test harnesses)
+HANDOFF.md
+test_*.mjs

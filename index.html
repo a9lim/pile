@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pile | a9l.im</title>
+  <meta name="description"
+    content="Semi-realistic nuclear reactor simulator. Three reactor types — PWR, RBMK, MSR — sharing 1D axial neutronics, thermal feedback, xenon, decay heat, burnup, and coupled plant safety systems.">
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+  <meta property="og:title" content="Pile — Interactive Nuclear Reactor Simulator">
+  <meta property="og:description" content="Run a PWR, RBMK-1000, or molten salt reactor in your browser. Axial neutronics, xenon, decay heat, burnup, plant systems, trips, and PWR procedures.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://a9l.im/pile">
+  <meta property="og:site_name" content="a9l.im">
+  <meta property="og:image" content="https://a9l.im/pile/og-image.webp">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:type" content="image/webp">
+  <meta property="og:image:alt" content="Pile nuclear reactor simulator">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://a9l.im/pile/og-image.webp">
+  <meta name="twitter:site" content="@_a9lim">
+  <meta name="twitter:creator" content="@_a9lim">
+  <meta property="og:locale" content="en_US">
+  <meta name="twitter:title" content="Pile — Interactive Nuclear Reactor Simulator">
+  <meta name="twitter:description" content="Three reactor types in one engine: axial neutronics, xenon, decay heat, burnup, plant safety systems, and a PWR fault/procedure deck.">
+  <meta name="author" content="a9lim">
+  <link rel="icon" href="/favicon.ico">
+  <meta name="theme-color" content="#C8553D">
+  <link rel="canonical" href="https://a9l.im/pile">
+  <link rel="alternate" hreflang="en" href="https://a9l.im/pile">
+  <link rel="alternate" hreflang="x-default" href="https://a9l.im/pile">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Pile">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="stylesheet" href="/shared-base.css">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="modulepreload" href="main.js">
+
+  <script src="/shared-tokens.js"></script>
+  <script defer src="/shared-touch.js"></script>
+  <script defer src="/shared-utils.js"></script>
+  <script defer src="/shared-haptics.js"></script>
+  <script defer src="/shared-info.js"></script>
+  <script defer src="/shared-shortcuts.js"></script>
+  <script defer src="/shared-about.js"></script>
+  <script defer src="/shared-icons.js"></script>
+  <script defer src="/shared-toolbar.js"></script>
+  <script defer src="/shared-camera.js"></script>
+  <script defer src="/shared-forms.js"></script>
+  <script defer src="/shared-dropdown.js"></script>
+  <script defer src="/shared-tooltip.js"></script>
+  <script defer src="/shared-sparkline.js"></script>
+  <script defer src="colors.js"></script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": ["WebApplication", "LearningResource"],
+    "name": "Pile",
+    "url": "https://a9l.im/pile",
+    "description": "Semi-realistic nuclear reactor simulator with three reactor types (PWR, RBMK-1000, MSR), 1D axial point-kinetics with six delayed-neutron precursor groups per node, thermal feedback via Doppler and moderator temperature coefficients, iodine-xenon dynamics, burnup-dependent coefficients, ANS-5.1 decay heat, IAPWS-IF97 saturation temperatures, coupled plant safety systems, reactor protection and warning channels, and a PWR fault/procedure deck.",
+    "keywords": "nuclear reactor simulator, point kinetics, xenon poisoning, decay heat, PWR, RBMK, molten salt reactor, reactor protection system, ECCS, containment",
+    "about": [
+      {"@type": "Thing", "name": "nuclear reactor", "sameAs": "https://www.wikidata.org/wiki/Q80877"},
+      {"@type": "Thing", "name": "pressurized water reactor", "sameAs": "https://www.wikidata.org/wiki/Q377968"},
+      {"@type": "Thing", "name": "RBMK", "sameAs": "https://www.wikidata.org/wiki/Q319449"},
+      {"@type": "Thing", "name": "molten salt reactor", "sameAs": "https://www.wikidata.org/wiki/Q373950"},
+      {"@type": "Thing", "name": "xenon-135", "sameAs": "https://www.wikidata.org/wiki/Q6501182"},
+      {"@type": "Thing", "name": "nuclear reactor safety", "sameAs": "https://www.wikidata.org/wiki/Q521918"},
+      {"@type": "Thing", "name": "Chernobyl disaster", "sameAs": "https://www.wikidata.org/wiki/Q486"},
+      {"@type": "Thing", "name": "Three Mile Island accident", "sameAs": "https://www.wikidata.org/wiki/Q840847"}
+    ],
+    "isBasedOn": [
+      {"@type": "CreativeWork", "name": "A Revised ANS Standard for Decay Heat from Fission Products", "url": "https://doi.org/10.13182/nt79-a32334", "identifier": "10.13182/nt79-a32334"},
+      {"@type": "CreativeWork", "name": "Xenon Behavior in the Molten Salt Reactor Experiment", "url": "https://doi.org/10.2172/4731186", "identifier": "10.2172/4731186"},
+      {"@type": "CreativeWork", "name": "INSAG-7: The Chernobyl Accident: Updating of INSAG-1", "url": "https://www-pub.iaea.org/MTCD/publications/PDF/Pub913e_web.pdf"}
+    ],
+    "speakable": {
+      "@type": "SpeakableSpecification",
+      "cssSelector": ["meta[name='description']"]
+    },
+    "applicationCategory": "EducationalApplication",
+    "educationalUse": "Interactive simulation for learning reactor physics, neutronics, thermal-hydraulics, and nuclear plant operation",
+    "learningResourceType": "Simulation",
+    "educationalLevel": "Undergraduate",
+    "inLanguage": "en",
+    "interactivityType": "active",
+    "datePublished": "2026-05-13",
+    "dateModified": "2026-05-17",
+    "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+    "codeRepository": "https://github.com/a9lim/a9lim.github.io",
+    "author": {"@type": "Person", "name": "a9lim", "@id": "https://a9l.im/#person"},
+    "accessibilityFeature": ["keyboardNavigable", "highContrast", "displayTransformability"],
+    "accessibilityHazard": ["flashing", "motionSimulation"]
+  }
+  </script>
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://a9l.im"},{"@type":"ListItem","position":2,"name":"Pile","item":"https://a9l.im/pile"}]}
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {"@type": "Question", "name": "What reactor types does Pile simulate?", "acceptedAnswer": {"@type": "Answer", "text": "Pile includes a Westinghouse-class four-loop PWR, an RBMK-1000, and an MSRE-scale molten salt reactor. They share a 1D axial neutronics engine but use different coefficient packs, coolant topology, delayed-neutron treatment, and plant branches."}},
+      {"@type": "Question", "name": "Is the default state a cold startup?", "acceptedAnswer": {"@type": "Answer", "text": "No. The default state is hot full-power equilibrium. Iodine, xenon, delayed precursors, decay heat, burnup, and RBMK operating void are populated and then snapshotted as reactivity references so the reactor starts critical without pretending those inventories are absent."}},
+      {"@type": "Question", "name": "What PWR safety systems are represented?", "acceptedAnswer": {"@type": "Answer", "text": "The PWR branch includes CVCS, pressurizer, four loops and steam generators, RCP seal failure, ECCS/RWST/sump recirculation, AFW, EDGs, batteries, switchyard relays, CCW/SW, containment sprays and fan coolers, spent-fuel-pool cooling, SGTR, feedwater pumps and heaters, and turbine-generator dynamics."}},
+      {"@type": "Question", "name": "What fidelity is this simulator aiming for?", "acceptedAnswer": {"@type": "Answer", "text": "Pile is a pedagogical training simulator, not a licensing-grade thermal-hydraulic code. It keeps state variables coupled and directionally realistic while using lumped 1D models instead of CFD, RELAP, TRACE, MELCOR, or MAAP fidelity."}}
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    "name": "How to use Pile",
+    "step": [
+      {"@type": "HowToStep", "position": 1, "name": "Choose a reactor type", "text": "Select PWR, RBMK, or MSR from the left rail. The state is rebuilt in place and the plant schematic changes topology."},
+      {"@type": "HowToStep", "position": 2, "name": "Run or step the simulation", "text": "Use play, step, and the speed control to inspect fast trips or slow xenon and decay-heat transients."},
+      {"@type": "HowToStep", "position": 3, "name": "Change reactivity and heat sink conditions", "text": "Move rods, boron where available, coolant flow, grid load, and PWR plant controls while watching the reactivity stack and axial profile."},
+      {"@type": "HowToStep", "position": 4, "name": "Inject PWR faults", "text": "Click a component on the plant schematic to open its inspector, which exposes that system's controls and fault injection — PORV, AFW, CCW/SW, EDG, MFW, SGTR, RCP, turbine, and loop transients."},
+      {"@type": "HowToStep", "position": 5, "name": "Stabilize the plant", "text": "Use SCRAM, the reactor-core inspector's procedure bundles, AFW, SI, sump recirculation, RHR, load shed, and SFP makeup, then verify trips and safety margins in the right-rail annunciator."}
+    ]
+  }
+  </script>
+</head>
+
+<body class="sim-body app-ready">
+  <a href="#stage" class="skip-link">Skip to plant schematic</a>
+
+  <header id="top-bar" class="sim-toolbar glass" role="toolbar" aria-label="Simulation controls">
+    <div class="header-brand">
+      <a href="/" class="sim-home" title="a9l.im"><img src="/logo.svg" alt="a9l.im" height="28"></a>
+      <h1 class="sim-brand">Pile</h1>
+    </div>
+    <div class="header-tools sim-toolbar-actions">
+      <button id="play-btn" class="tool-btn" aria-label="Pause simulation" title="Pause"></button>
+      <button id="speed-btn" class="tool-btn speed-btn" aria-label="Simulation speed" title="Speed: 1× (right-click to slow)">
+        <span class="speed-label">1×</span>
+      </button>
+      <button id="step-btn" class="tool-btn" aria-label="Step forward" title="Step forward" data-icon="step"></button>
+      <button id="reset-btn" class="tool-btn" aria-label="Reset simulation" title="Reset simulation" data-icon="reset"></button>
+      <span class="tool-sep hide-sm"></span>
+      <button id="theme-btn" class="tool-btn hide-sm" data-theme="auto" aria-label="Toggle theme" title="Theme" data-icon="themeAuto"></button>
+      <button id="audio-btn" class="tool-btn" aria-label="Toggle count-rate audio" aria-pressed="false" title="Count-rate audio: off" data-icon="speaker"></button>
+      <button id="scenario-btn" class="tool-btn" aria-label="Guided scenarios" title="Guided scenarios" data-icon="document"></button>
+      <button id="about-btn" class="tool-btn" aria-label="About" title="About" data-icon="about"></button>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ─── LEFT RAIL — always-visible core physics ─── -->
+    <aside id="rail-left" class="rail" aria-label="Core status">
+      <div class="rail-section">
+        <div class="mode-toggles reactor-type-row" id="reactor-type-toggles" role="radiogroup" aria-label="Reactor type">
+          <button class="mode-btn active" data-reactor="pwr" role="radio" aria-checked="true">PWR</button>
+          <button class="mode-btn" data-reactor="rbmk" role="radio" aria-checked="false">RBMK</button>
+          <button class="mode-btn" data-reactor="msr" role="radio" aria-checked="false">MSR</button>
+        </div>
+      </div>
+      <div class="rail-scroll scrollbar-thin">
+        <div class="stat-group">
+          <div class="group-label"><span id="g-reactor-type">PWR</span> — Core</div>
+          <div class="stat-row"><span class="stat-label">Fission</span><span class="stat-value" id="g-fission">—</span></div>
+          <div class="stat-row"><span class="stat-label">Decay heat</span><span class="stat-value" id="g-decay">—</span></div>
+          <div class="stat-row"><span class="stat-label">Total Q</span><span class="stat-value" id="g-total">—</span></div>
+          <div class="stat-row"><span class="stat-label">Generator</span><span class="stat-value" id="g-gen">—</span></div>
+          <div class="stat-row"><span class="stat-label">Sim time</span><span class="stat-value" id="g-sim-time">—</span></div>
+        </div>
+        <div class="stat-group">
+          <div class="group-label">Reactivity</div>
+          <div class="stat-row"><span class="stat-label">Net ρ</span><span class="stat-value" id="g-reactivity">—</span></div>
+          <div class="stat-row"><span class="stat-label">In dollars</span><span class="stat-value" id="g-dollars">—</span></div>
+          <div class="stat-row"><span class="stat-label">Period</span><span class="stat-value" id="g-period">—</span></div>
+          <div class="stat-row"><span class="stat-label">Axial offset</span><span class="stat-value" id="g-ao">—</span></div>
+          <div class="stat-row" id="g-orm-row"><span class="stat-label">ORM</span><span class="stat-value" id="g-orm">—</span></div>
+        </div>
+        <div class="rail-canvas-wrap">
+          <div class="group-label">Axial profile</div>
+          <canvas id="axial-canvas" aria-label="Axial profile of flux, fuel temperature, and xenon"></canvas>
+        </div>
+        <div class="rail-canvas-wrap">
+          <div class="group-label">Reactivity stack</div>
+          <canvas id="reactivity-stack" aria-label="Reactivity contribution stack"></canvas>
+        </div>
+      </div>
+      <button id="scram-btn" class="scram-action" aria-label="Manual scram (Shift+S)" title="Manual scram (Shift+S)">SCRAM</button>
+    </aside>
+
+    <!-- ─── CENTER — zoom/pan plant schematic ─── -->
+    <section id="stage" aria-label="Plant schematic">
+      <svg id="schematic" preserveAspectRatio="xMidYMid meet" aria-label="Interactive plant schematic"></svg>
+      <div id="schematic-hint" class="panel-hint">Click a component to inspect · scroll to zoom · drag to pan</div>
+      <div id="zoom-controls" class="glass">
+        <button id="zoom-out" class="tool-btn icon-tight" aria-label="Zoom out" title="Zoom out">−</button>
+        <span id="zoom-pct">100%</span>
+        <button id="zoom-in" class="tool-btn icon-tight" aria-label="Zoom in" title="Zoom in">+</button>
+        <button id="zoom-reset" class="tool-btn icon-tight" aria-label="Fit plant" title="Fit whole plant" data-icon="reset" data-icon-size="14"></button>
+      </div>
+      <aside id="inspector" aria-label="Component inspector"></aside>
+    </section>
+
+    <!-- ─── RIGHT RAIL — trips + trends ─── -->
+    <aside id="rail-right" class="rail" aria-label="Trips and trends">
+      <div class="rail-scroll scrollbar-thin">
+        <div class="stat-group">
+          <div class="group-label">RPS Trips</div>
+          <p class="panel-hint">Solid = tripped · dim = bypassed.</p>
+          <div id="annunciator-grid"></div>
+          <div class="trip-actions">
+            <button id="btn-reset-trips" class="ghost-btn" aria-label="Reset RPS trips">Reset trips</button>
+          </div>
+        </div>
+        <div class="stat-group">
+          <div class="group-label">Trends</div>
+          <div class="strip-card">
+            <div class="strip-head"><span class="strip-label">Fission</span><span class="strip-value" id="strip-power-val">—</span></div>
+            <canvas class="sparkline strip-canvas" id="spark-power" aria-label="Fission power history"></canvas>
+          </div>
+          <div class="strip-card">
+            <div class="strip-head"><span class="strip-label">Peak fuel</span><span class="strip-value" id="strip-temp-val">—</span></div>
+            <canvas class="sparkline strip-canvas" id="spark-temp" aria-label="Peak fuel temperature history"></canvas>
+          </div>
+          <div class="strip-card">
+            <div class="strip-head"><span class="strip-label">Xenon worth</span><span class="strip-value" id="strip-xenon-val">—</span></div>
+            <canvas class="sparkline strip-canvas" id="spark-xenon" aria-label="Xenon worth history"></canvas>
+          </div>
+          <div class="strip-card">
+            <div class="strip-head"><span class="strip-label">Axial offset</span><span class="strip-value" id="strip-ao-val">—</span></div>
+            <canvas class="sparkline strip-canvas" id="spark-ao" aria-label="Axial offset history"></canvas>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <details class="edu-content">
+    <summary>About this simulation</summary>
+    <article>
+      <h2>What is Pile?</h2>
+      <p>Pile is an interactive nuclear reactor simulator for comparing how different reactor designs respond to the same operator actions. It is not a licensing-grade safety code. The core model is deliberately compact: one axial dimension, six delayed-neutron precursor groups per node, a semi-analytical point-kinetics update, lumped fuel/clad/coolant heat capacities, iodine-135 and xenon-135 inventories, burnup-dependent coefficients, and ANS-5.1-style decay heat. That compact model is coupled to plant systems so transients are not just scripted gauges. A turbine trip changes heat extraction, which changes coolant temperature, which feeds back into reactivity. A seal leak reduces RCS inventory, which changes pressurizer level, which can actuate SI, which drains RWST inventory and eventually asks for sump recirculation.</p>
+
+      <h3>Reactor Types</h3>
+      <p>The PWR mode represents a Westinghouse-class four-loop pressurized water reactor. It has strongly negative Doppler and moderator feedback, soluble boron through CVCS, a dynamic pressurizer, four steam generators, AFW, ECCS, EDGs, DC batteries, switchyard relays, containment sprays and fan coolers, spent-fuel-pool cooling, and a staged turbine-generator. The RBMK mode represents a graphite-moderated pressure-tube reactor with boiling water, direct-cycle steam, graphite moderator feedback, a low-power positive void coefficient, separated steam mass quality and void fraction, and graphite-tipped control rods. The MSR mode represents an MSRE-scale fuel-salt reactor with fuel dissolved in FLiBe, circulating delayed-neutron precursors, xenon off-gas removal, an intermediate salt loop, and a freeze plug that drains salt into a passively cooled drain tank when plug cooling is lost or the loop goes hot and stagnant.</p>
+
+      <h3>Initial State</h3>
+      <p>The simulator starts from hot full-power equilibrium, not from a clean fresh core. Delayed neutron precursors, iodine, xenon, decay-heat groups, burnup, and RBMK operating void are initialized to realistic operating inventories. Each of those effects is then snapshotted as a reactivity reference, so the default reactor is critical by construction without erasing the inventory. This matters pedagogically: after a power reduction, xenon moves relative to a real full-power equilibrium; after a scram, decay heat remains as the residual heat source; during normal full-power operation, total core heat is nominal rather than fission power plus a second copy of equilibrium decay heat.</p>
+
+      <h3>What to Watch</h3>
+      <p>The axial canvas shows flux, temperature, and xenon shape. The reactivity stack decomposes total reactivity into rods, boron, Doppler, moderator, void, xenon, and burnup contributions. The plant schematic shows topology and major heat-flow paths, and clicking any component opens an inspector with that system's detailed readouts and controls. The right-rail annunciator latches scram and warning channels; not every alarm is a reactor trip. For example, RBMK low ORM and Ledinegg-style flow excursion are warning indications, while high flux, short period, low DNBR, low flow, pressurizer level, containment pressure, seal LOCA, and turbine overspeed can trip the reactor where applicable. The component inspectors expose command-level failures and the reactor-core inspector collects the procedure bundles; it is a training layer, not a full scenario engine with scoring and replay.</p>
+
+      <h3>Learning Outcomes</h3>
+      <p>After using Pile, students should be able to explain why negative temperature coefficients stabilize a PWR; why RBMK low-power operation with low ORM and positive void feedback is qualitatively different from ordinary full-power operation; why xenon poisoning is delayed relative to power changes; why decay heat dominates post-scram heat removal; how AFW, ECCS, EDGs, DC power, CCW/SW, containment, and the spent-fuel pool interact during a PWR transient; and why a molten salt reactor's circulating precursors and drain tank change the safety story without making the plant magic.</p>
+
+      <h3>Prerequisites</h3>
+      <p>Useful background: basic differential equations, heat transfer, first-year nuclear engineering vocabulary, and the idea of feedback coefficients. The simulator is still usable without that background if you treat the gauges as an experiment: change one control at a time, pause often, and compare the reactivity stack before and after the plant response catches up.</p>
+
+      <h3>Accessibility</h3>
+      <p>All controls are keyboard reachable. Sliders support arrow keys and Home/End. The scram action is available from the red SCRAM button and Shift+S. Theme controls support a high-contrast presentation, and numerical readouts accompany color-coded values such as reactivity sign, temperature, DNBR, flow regime, and trip state. Known hazards: the plant schematic and sparklines are continuously animated while running, and the annunciator blinks newly latched trips for a short interval before going solid.</p>
+
+      <h3>References</h3>
+      <p>A. Tobias, <a href="https://doi.org/10.13182/nt79-a32334" target="_blank" rel="noopener">"A Revised ANS Standard for Decay Heat from Fission Products"</a>, <em>Nuclear Technology</em> (1979). R. B. Briggs, <a href="https://doi.org/10.2172/4731186" target="_blank" rel="noopener">"Xenon Behavior in the Molten Salt Reactor Experiment"</a> (1968). International Nuclear Safety Advisory Group, <a href="https://www-pub.iaea.org/MTCD/publications/PDF/Pub913e_web.pdf" target="_blank" rel="noopener"><em>INSAG-7: The Chernobyl Accident: Updating of INSAG-1</em></a> (1992).</p>
+
+      <p><em>See also: <a href="/geon">Geon</a> for particle dynamics, <a href="/cyano">Cyano</a> for biochemical networks, <a href="/shoals">Shoals</a> for financial dynamics, and <a href="/gerry">Gerry</a> for electoral systems.</em></p>
+    </article>
+  </details>
+
+  <!-- Wave 3 — guided scenario picker overlay -->
+  <div id="scenario-overlay" class="sim-overlay" hidden>
+    <div class="sim-overlay-panel scenario-overlay-panel">
+      <div class="scenario-overlay-head">
+        <h2 class="scenario-overlay-title">Guided Scenarios</h2>
+        <button id="scenario-close" class="tool-btn icon-tight" aria-label="Close scenarios" data-icon="close" data-icon-size="16"></button>
+      </div>
+      <div class="sim-overlay-body">
+        <p class="panel-hint">Each scenario rebuilds the reactor to its starting conditions and tracks objectives in a panel while you run it. The simulation starts paused — read the briefing, then press play.</p>
+        <div id="scenario-list" class="scenario-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wave 3 — live objectives HUD (populated by src/ui/scenarios.js) -->
+  <aside id="scenario-hud" class="scenario-hud glass" aria-label="Scenario objectives" hidden></aside>
+
+  <script type="module" src="main.js"></script>
+</body>
+
+</html>
