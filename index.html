@@ -65,14 +65,14 @@
     "description": "Semi-realistic nuclear reactor simulator with three reactor types (PWR, RBMK-1000, MSR), 1D axial point-kinetics with six delayed-neutron precursor groups per node, thermal feedback via Doppler and moderator temperature coefficients, iodine-xenon dynamics, burnup-dependent coefficients, ANS-5.1 decay heat, IAPWS-IF97 saturation temperatures, coupled plant safety systems, reactor protection and warning channels, and a PWR fault/procedure deck.",
     "keywords": "nuclear reactor simulator, point kinetics, xenon poisoning, decay heat, PWR, RBMK, molten salt reactor, reactor protection system, ECCS, containment",
     "about": [
-      {"@type": "Thing", "name": "nuclear reactor", "sameAs": "https://www.wikidata.org/wiki/Q80877"},
-      {"@type": "Thing", "name": "pressurized water reactor", "sameAs": "https://www.wikidata.org/wiki/Q377968"},
-      {"@type": "Thing", "name": "RBMK", "sameAs": "https://www.wikidata.org/wiki/Q319449"},
-      {"@type": "Thing", "name": "molten salt reactor", "sameAs": "https://www.wikidata.org/wiki/Q373950"},
-      {"@type": "Thing", "name": "xenon-135", "sameAs": "https://www.wikidata.org/wiki/Q6501182"},
-      {"@type": "Thing", "name": "nuclear reactor safety", "sameAs": "https://www.wikidata.org/wiki/Q521918"},
-      {"@type": "Thing", "name": "Chernobyl disaster", "sameAs": "https://www.wikidata.org/wiki/Q486"},
-      {"@type": "Thing", "name": "Three Mile Island accident", "sameAs": "https://www.wikidata.org/wiki/Q840847"}
+      {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q80877", "name": "nuclear reactor"},
+      {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q377968", "name": "pressurized water reactor"},
+      {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q319449", "name": "RBMK"},
+      {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q373950", "name": "molten salt reactor"},
+      {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q6501182", "name": "xenon-135"},
+      {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q521918", "name": "nuclear reactor safety"},
+      {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q486", "name": "Chernobyl disaster"},
+      {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q840847", "name": "Three Mile Island accident"}
     ],
     "isBasedOn": [
       {"@type": "CreativeWork", "name": "A Revised ANS Standard for Decay Heat from Fission Products", "url": "https://doi.org/10.13182/nt79-a32334", "identifier": "10.13182/nt79-a32334"},
@@ -89,13 +89,42 @@
     "educationalLevel": "Undergraduate",
     "inLanguage": "en",
     "interactivityType": "active",
+    "operatingSystem": "Any (Web Browser)",
+    "browserRequirements": "Modern browser with Canvas support",
+    "teaches": [
+      "Point-kinetics neutronics with six delayed-neutron precursor groups",
+      "Reactivity feedback from Doppler, moderator, and void temperature coefficients",
+      "Iodine-135 / xenon-135 poisoning and post-shutdown reactivity transients",
+      "ANS-5.1 decay heat and why a reactor needs cooling long after shutdown",
+      "Design differences between PWR, RBMK-1000, and molten-salt reactors",
+      "The RBMK positive-void and graphite-tip effects behind the Chernobyl accident",
+      "Reactor protection, SCRAM, and coupled plant safety systems (ECCS, AFW, containment)"
+    ],
+    "educationalAlignment": [
+      {"@type": "AlignmentObject", "alignmentType": "educationalSubject", "targetName": "AP Physics 2", "targetUrl": "https://apcentral.collegeboard.org/courses/ap-physics-2"},
+      {"@type": "AlignmentObject", "alignmentType": "educationalSubject", "targetName": "NGSS HS-PS1: Matter and Its Interactions", "targetUrl": "https://www.nextgenscience.org/dci-arrangement/hs-ps1-matter-and-its-interactions"},
+      {"@type": "AlignmentObject", "alignmentType": "educationalSubject", "targetName": "NGSS HS-PS3: Energy", "targetUrl": "https://www.nextgenscience.org/dci-arrangement/hs-ps3-energy"}
+    ],
     "datePublished": "2026-05-13",
     "dateModified": "2026-05-17",
     "license": "https://www.gnu.org/licenses/agpl-3.0.html",
     "codeRepository": "https://github.com/a9lim/a9lim.github.io",
+    "sameAs": "https://github.com/a9lim/a9lim.github.io",
     "author": {"@type": "Person", "name": "a9lim", "@id": "https://a9l.im/#person"},
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "a9l.im",
+      "url": "https://a9l.im"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "timeRequired": "PT30M",
     "accessibilityFeature": ["keyboardNavigable", "highContrast", "displayTransformability"],
-    "accessibilityHazard": ["flashing", "motionSimulation"]
+    "accessibilityHazard": ["flashing", "motionSimulation"],
+    "relatedLink": ["https://a9l.im/geon", "https://a9l.im/cyano", "https://a9l.im/gerry", "https://a9l.im/shoals", "https://a9l.im/miasma", "https://a9l.im/plasma"]
   }
   </script>
   <script type="application/ld+json">
