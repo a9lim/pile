@@ -29,13 +29,9 @@ export function initScenarios(SIM, engine, hooks) {
   function openOverlay()  { if (overlay) overlay.hidden = false; }
   function closeOverlay() { if (overlay) overlay.hidden = true; }
 
-  if (openBtn)  openBtn.addEventListener('click', openOverlay);
-  if (closeBtn) closeBtn.addEventListener('click', closeOverlay);
-  if (overlay) {
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) closeOverlay();
-    });
-  }
+  if (openBtn) openBtn.addEventListener('click', openOverlay);
+  // shared helper wires close-button + backdrop-click dismiss; Escape stays local.
+  initOverlayDismiss(overlay, closeBtn, closeOverlay);
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && overlay && !overlay.hidden) closeOverlay();
   });
