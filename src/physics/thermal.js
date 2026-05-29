@@ -278,10 +278,14 @@ export function stepThermal(state, dt) {
   if (T.graphiteMassKg) {
     const mGraph = T.graphiteMassKg / N;
     const hGraph = (T.htCoeff * 0.3) / N; // graphite-coolant coupling weaker
+    // Wave-C — RBMK graphite gas-circuit loss scales DOWN the graphite→coolant
+    // cooling path (rbmk-aux.js). 1.0 in normal operation → init unperturbed.
+    const coolFactor = state.rbmkAux?.graphiteCoolingFactor ?? 1;
     for (let k = 0; k < N; k++) {
       const Tg = state.T_graphite[k];
       const Tref = state.T_coolant[k];
-      const dTg = (hGraph * (state.T_fuel[k] - Tg) - hGraph * (Tg - Tref)) / (mGraph * T.heatCapGraphite);
+      const dTg = (hGraph * (state.T_fuel[k] - Tg) - coolFactor * hGraph * (Tg - Tref))
+        / (mGraph * T.heatCapGraphite);
       state.T_graphite[k] = Tg + dTg * dt;
     }
   }

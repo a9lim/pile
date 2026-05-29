@@ -1,5 +1,15 @@
 // multichannel.js -- II.7: parallel-channel TH model for RBMK direct-cycle.
 //
+// LANDMINE (Wave-A two-loop MCC): this solver runs ONCE on the COMBINED core
+// flow (`state.out.flowMassRateKgPerS`, the sum of the two RBMK loop flows),
+// NOT per loop. The K_fric / hot-lump calibration below is anchored on the
+// WHOLE core (10500 kg/s design flow, N_CHANNELS_RBMK = 1661, ~6.3 kg/s/pipe).
+// Splitting the void walk per loop would halve the channel count and design
+// flow per call and re-open that calibration AND force two separate void/
+// quality reference snapshots in state.js — breaking critical-by-construction.
+// Keep it single-combined. Loop asymmetry lives in the per-loop FLOW (which
+// still sums into flowMassRateKgPerS here), not in two void meshes.
+//
 // Replaces the single-channel channel-walk void model in thermal.js with a
 // minimum two-channel split: a HOT channel (representative of the peak-power
 // fuel assemblies, scaled by T.hotChannelFactor) and an AVG channel (the bulk

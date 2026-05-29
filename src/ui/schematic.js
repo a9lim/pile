@@ -59,22 +59,93 @@ function addText(parent, cls, x, y, txt) {
   return t;
 }
 
-// Generic component — vessel / tank / pump / valve / etc.
+// Per-kind silhouette. Returns the primary fillable element (`shapeEl` — the
+// one the render loop tints + the CSS thickens on select/alarm), an array of
+// stroke-only `details` accents, and `labelBelow` (true for small round/pointy
+// kinds whose label sits beneath; false for box kinds whose label sits inside).
+function buildShape(def) {
+  const { x, y, w, h, kind } = def;
+  const cx = x + w / 2, cy = y + h / 2;
+  const details = [];
+  const cls = 'sch-shape sch-shape-' + kind;
+  const detail = ({ tag = 'line', ...attrs }) =>
+    details.push(svgEl(tag, { class: 'sch-detail', ...attrs }));
+  let shapeEl, labelBelow = false;
+
+  switch (kind) {
+    case 'pump': {                       // volute circle + discharge nub
+      const r = Math.min(w, h) / 2;
+      shapeEl = svgEl('circle', { class: cls, cx, cy, r });
+      detail({ tag: 'path', d: `M ${cx} ${cy} L ${cx + r * 0.95} ${cy - r * 0.55}` });
+      labelBelow = true; break;
+    }
+    case 'generator': {                  // circle + terminal box
+      const r = Math.min(w, h) / 2;
+      shapeEl = svgEl('circle', { class: cls, cx, cy, r });
+      detail({ tag: 'rect', x: cx + r - 4, y: cy - r * 0.22,
+        width: r * 0.5, height: r * 0.44 });
+      labelBelow = true; break;
+    }
+    case 'turbine': {                    // trapezoid (steam path widens)
+      shapeEl = svgEl('path', { class: cls,
+        d: `M ${x + w * 0.18} ${y} L ${x + w * 0.82} ${y} L ${x + w} ${y + h} L ${x} ${y + h} Z` });
+      break;
+    }
+    case 'valve': {                      // bowtie
+      shapeEl = svgEl('path', { class: cls,
+        d: `M ${x} ${y} L ${cx} ${cy} L ${x} ${y + h} Z M ${x + w} ${y} L ${cx} ${cy} L ${x + w} ${y + h} Z` });
+      labelBelow = true; break;
+    }
+    case 'drum': {                       // horizontal cylinder
+      const r = Math.min(h / 2, w / 2);
+      shapeEl = svgEl('rect', { class: cls, x, y, width: w, height: h, rx: r, ry: r });
+      detail({ x1: x + r, y1: y, x2: x + r, y2: y + h });
+      detail({ x1: x + w - r, y1: y, x2: x + w - r, y2: y + h });
+      break;
+    }
+    case 'radiator': {                   // finned bank
+      shapeEl = svgEl('rect', { class: cls, x, y, width: w, height: h, rx: 2 });
+      for (let i = 1; i < 7; i++) {
+        const fx = x + (w * i) / 7;
+        detail({ x1: fx, y1: y + 6, x2: fx, y2: y + h - 6 });
+      }
+      break;
+    }
+    case 'hx': {                         // shell + tube lines
+      shapeEl = svgEl('rect', { class: cls, x, y, width: w, height: h, rx: 2 });
+      for (let i = 1; i < 4; i++) {
+        const ty = y + (h * i) / 4;
+        detail({ x1: x + 8, y1: ty, x2: x + w - 8, y2: ty });
+      }
+      break;
+    }
+    case 'tank': {                       // squat rounded tank
+      shapeEl = svgEl('rect', { class: cls, x, y, width: w, height: h,
+        rx: Math.min(h * 0.18, 22) });
+      break;
+    }
+    case 'vessel':
+    default: {                           // vertical vessel, domed top
+      const r = Math.min(w * 0.34, h * 0.34);
+      shapeEl = svgEl('path', { class: cls,
+        d: `M ${x} ${y + r} Q ${x} ${y} ${x + r} ${y} L ${x + w - r} ${y} `
+         + `Q ${x + w} ${y} ${x + w} ${y + r} L ${x + w} ${y + h} L ${x} ${y + h} Z` });
+      break;
+    }
+  }
+  return { shapeEl, details, labelBelow };
+}
+
+// Generic component — dispatches to a per-kind silhouette, then lays out the
+// label + inline readouts.
 function buildComponent(def, parent) {
   const g = svgEl('g', { class: 'sch-comp', 'data-id': def.id });
-  const circle = def.kind === 'pump' || def.kind === 'generator';
   const cx = def.x + def.w / 2;
-  let shapeEl;
-  if (circle) {
-    shapeEl = svgEl('circle', { class: 'sch-shape sch-shape-' + def.kind,
-      cx, cy: def.y + def.h / 2, r: Math.min(def.w, def.h) / 2 });
-  } else {
-    shapeEl = svgEl('rect', { class: 'sch-shape sch-shape-' + def.kind,
-      x: def.x, y: def.y, width: def.w, height: def.h, rx: 3 });
-  }
+  const { shapeEl, details, labelBelow } = buildShape(def);
   g.appendChild(shapeEl);
+  for (const d of details) g.appendChild(d);
   const readoutEls = [];
-  if (circle) {
+  if (labelBelow) {
     addText(g, 'sch-label', cx, def.y + def.h + 15, def.label);
     for (let i = 0; i < 2; i++)
       readoutEls.push(addText(g, 'sch-readout', cx, def.y + def.h + 30 + i * 14));

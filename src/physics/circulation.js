@@ -1,5 +1,14 @@
 // circulation.js -- regime-aware primary coolant mass-flow model.
 //
+// Wave-A (RBMK) — the per-loop path additionally models MCP suction cavitation
+// for reactor types that set T.mcpCavitationModel (RBMK). When the downcomer
+// water at the pump suction loses subcooling margin (low drum pressure or hot
+// return), the main circulation pump cavitates and its developed head — hence
+// forced flow — derates. The hook reads the live aggregate drum pressure /
+// return temperature (one-step lag vs plant.js, immaterial for this slow
+// effect) and is identity (derate 1.0) at the well-subcooled design point, so
+// critical-by-construction is preserved.
+//
 // Wave 2.5 Phase II.3 — replaces the always-on forced-flow assumption with a
 // three-regime model: FORCED (RCPs on), COASTDOWN (RCPs commanded off but
 // inertia + decaying flow), NATURAL (buoyancy-driven by decay/fission heat).
@@ -38,6 +47,8 @@
 // not a first-principles K-loss budget. Runtime preserves that anchor and uses
 // cubic scaling away from it.
 
+import { tSat as saturationTempK } from './steam-tables.js';
+
 // Below this commanded coolant-flow fraction the pumps are treated as
 // "tripped" — coastdown kinematics take over (forced + nc → coast + nc).
 // Threshold chosen so a normal slider drag past 5% still reads as the user
@@ -69,6 +80,7 @@ function stepCirculationMultiLoop(state, dt) {
   const tau = T.rcpCoastdownTauSec ?? 10;
   const cmdRcp = state.cmd.rcpRunning || [];
   const cmdIso = state.cmd.loopIsolated || [];
+  const cmdTrip = state.cmd.mcpTrip || [];
 
   // Core-wide natural circulation from total core heat (fission + decay).
   const Q_core_W = Math.max((state.out?.totalCorePowerMW ?? 0) * 1e6, 0);
@@ -85,12 +97,17 @@ function stepCirculationMultiLoop(state, dt) {
   if (nActive < 1) nActive = 1;
   const m_nc_loop = m_nc_total / nActive;
 
+  // Wave-B — RBMK MCPs lose power on a station blackout (no offsite, no
+  // diesel, rundown expired). One-step lag vs rbmk-electrical.js. PWR has no
+  // state.rbmkElectrical → acDown stays false.
+  const acDown = state.rbmkElectrical && state.rbmkElectrical.acAvailable === false;
+
   let m_total = 0;
   let m_pumped_total = 0;
   for (let l = 0; l < L; l++) {
     const loop = loops[l];
     loop.isolated = cmdIso[l] === true;
-    loop.rcpRunning = !(cmdRcp[l] === false);
+    loop.rcpRunning = !(cmdRcp[l] === false) && !(cmdTrip[l] === true) && !acDown;
     if (loop.isolated) {
       // Isolated loop: shut valves, no circulation. Coastdown latch reset so
       // re-opening the loop with the RCP on starts clean.
@@ -98,15 +115,32 @@ function stepCirculationMultiLoop(state, dt) {
       loop.massFlowKgPerS = 0;
       continue;
     }
+    // RBMK MCP suction-cavitation derate (gated on T.mcpCavitationModel).
+    // Subcooling margin = Tsat(suction P) − suction T, using the live
+    // aggregate drum pressure / downcomer return temp (one-step lag). At the
+    // design point the margin is ~11 K so cavDerate == 1 → flow == design and
+    // the void/quality references hold (critical-by-construction).
+    let cavDerate = 1;
+    if (T.mcpCavitationModel) {
+      const Psuct = state.sgSecondaryP ?? loop.drumPressureMPa ?? T.sgSecondaryPressureMPa;
+      const Tsuct = state._coolantReturnT ?? loop.tColdK ?? T.coolantInletTempK;
+      const subcool = saturationTempK(Psuct) - Tsuct;
+      loop.suctionSubcoolK = subcool;
+      loop.drumPressureMPa = Psuct;
+      loop.tColdK = Tsuct;
+      cavDerate = mcpCavitationDerate(subcool, T.mcpCavitationSubcoolK ?? 2);
+      loop.cavitating = cavDerate < 0.999;
+    }
     // Operator-commanded flow fraction for THIS loop: the global slider
     // (state.coolantFlowFrac) gated by this loop's RCP on/off.
     const loopCmdFrac = state.coolantFlowFrac * (loop.rcpRunning ? 1 : 0);
     let m_forced = 0;
     let m_coast = 0;
     if (loopCmdFrac > NC_HANDOFF_FRAC) {
-      // RCP on: latch the live fraction, no separate coast term.
+      // RCP on: latch the live fraction, no separate coast term. Cavitation
+      // derates the developed head (forced flow), not the rotor coastdown.
       loop.coastdownFlow = loopCmdFrac;
-      m_forced = perLoopDesign * loopCmdFrac;
+      m_forced = perLoopDesign * loopCmdFrac * cavDerate;
     } else {
       // RCP tripped: exponential coastdown of the captured flow.
       loop.coastdownFlow *= Math.exp(-dt / Math.max(tau, 1e-3));
@@ -195,6 +229,15 @@ function stepCirculationSingleLoop(state, dt) {
     : 0;
   state.out.naturalCircFlowKgPerS = m_nc;
   state.out.flowRegime = regime;
+}
+
+// MCP forced-flow derate from suction cavitation. 1.0 while the subcooling
+// margin is at/above the threshold; ramps down to a 0.2 floor as the suction
+// crosses saturation (developed head collapses). Linear over an 8 K span.
+function mcpCavitationDerate(subcoolK, thresholdK) {
+  if (subcoolK >= thresholdK) return 1;
+  const f = 1 - ((thresholdK - subcoolK) / 8) * 0.8;
+  return f < 0.2 ? 0.2 : f;
 }
 
 function naturalCirculationFlow(T, Q_core_W) {

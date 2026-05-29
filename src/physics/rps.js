@@ -48,6 +48,34 @@ const TRIP_LABELS = Object.freeze({
   // reduce power, not to slam the rods (which would actually worsen the
   // dryout in the hot channel on a slow scram).
   flowExcursion:      'FLOW EXCURSION',
+  // Wave-B — RBMK drum-separator level protection (direct-cycle only).
+  // lowDrumLevel is a SCRAM input (loss of drum water → pressure-tube dryout);
+  // highDrumLevel is a WARNING (moisture carryover degrades the turbine).
+  lowDrumLevel:       'LOW DRUM LVL',
+  highDrumLevel:      'HIGH DRUM LVL',
+  // Wave-B — RBMK auxiliary-AC WARNING channels (direct-cycle only). SBO =
+  // no offsite, no diesel, rundown expired (MCPs coasting to natural circ).
+  rbmkSbo:            'STATION BLACKOUT',
+  rbmkDgFault:        'DIESEL FAULT',
+  // Wave-B — RBMK ECCS / ALS WARNING channels (direct-cycle only).
+  rbmkEccsActuated:   'ECCS ACTUATED',
+  rbmkAlsHighP:       'HIGH ALS P',
+  // Wave-C — RBMK auxiliary-circuit WARNING channels (direct-cycle only).
+  gasCircuitLost:     'GAS CIRCUIT',
+  highGraphiteTemp:   'HIGH GRAPHITE T',
+  cpsCoolingLost:     'CPS COOLING',
+  rbmkMfwLost:        'MFW LOST',
+  // Wave-D — RBMK pressure-tube break (LOCA) WARNING.
+  rbmkPipeBreak:      'PRESSURE TUBE BREAK',
+  // MSR-A — air-radiator / coolant-salt WARNING channels (MSR only).
+  msrSaltFreeze:      'COOLANT SALT FREEZE',
+  msrFreezeHeaters:   'FREEZE HEATERS',
+  // MSR-B — off-gas + reactor-cell WARNING channels (MSR only).
+  msrOffGasLost:      'OFF-GAS LOST',
+  msrCellHighTemp:    'CELL HIGH T',
+  // MSR-C — fuel-salt chemistry WARNING channels (MSR only).
+  msrRedoxHigh:       'REDOX OXIDIZING',
+  msrCorrosion:       'CORROSION',
   // III.4 — RCP shaft-seal LOCA scram trip. PWR-only. Fires when stage 2
   // of the staged "21-21-21" failure has latched (cumulative leak ≈ 76
   // gpm/pump — primary draining faster than HHSI can compensate over
@@ -131,6 +159,10 @@ const SCRAM_TRIPS = Object.freeze(new Set([
   'lowPzrLevel', 'highPzrLevel',
   'lowSgLevel', 'highSgLevel',
   'highContainmentP', 'lowCoolantFlow', 'manualScram', 'lossOfOffsitePower',
+  // Wave-B/D — RBMK low drum level (channel dryout) + high ALS compartment
+  // pressure (suppression-pool over-pressure = pressure-tube-break detection)
+  // are scram inputs.
+  'lowDrumLevel', 'rbmkAlsHighP',
   // III.4 — Stage-2 seal failure is the SCRAM input. Stage-1 alone stays
   // a warning (sealCoolingLost) since HHSI can absorb the ~21 gpm leak.
   'sealLoca',
@@ -212,6 +244,40 @@ export function stepRps(state, dt) {
     // arrive). 2-second sustained condition gate prevents transient
     // multi-root-flicker from latching the trip.
     flowExcursion:     T.id === 'rbmk' && state._ledineggAccum > 2,
+    // Wave-B — RBMK drum-separator level protection. Aggregate (min) drum
+    // level is written by plant.js. Low → SCRAM, high → WARNING.
+    lowDrumLevel:      T.primaryTopology === 'direct'
+                        && state.sgSecondaryLevel < (T.rbmkDrum?.lowLevelScram ?? 0.25),
+    highDrumLevel:     T.primaryTopology === 'direct'
+                        && state.sgSecondaryLevel > (T.rbmkDrum?.highLevelWarn ?? 0.85),
+    // Wave-B — RBMK station blackout + diesel fault WARNINGs.
+    rbmkSbo:           !!state.rbmkElectrical && state.rbmkElectrical.acAvailable === false,
+    rbmkDgFault:       !!state.rbmkElectrical && state.rbmkElectrical.anyDgFaulted === true,
+    // Wave-B — RBMK ECCS actuated (status) + ALS compartment over-pressure.
+    rbmkEccsActuated:  !!state.rbmkEccs && state.rbmkEccs.actuated === true,
+    rbmkAlsHighP:      !!state.rbmkAls
+                        && state.rbmkAls.compartmentPressureMPa
+                            > (T.rbmkAls?.highPressureWarnMPa ?? 0.13),
+    // Wave-C — RBMK auxiliary-circuit WARNINGs.
+    gasCircuitLost:    !!state.rbmkAux && state.rbmkAux.gasCoolingOk === false,
+    highGraphiteTemp:  !!state.rbmkAux
+                        && state.rbmkAux.avgGraphiteTempK > (T.rbmkAux?.highGraphiteTempWarnK ?? 1373),
+    cpsCoolingLost:    !!state.rbmkAux && state.rbmkAux.cpsCoolingOk === false,
+    rbmkMfwLost:       !!state.rbmkAux && state.rbmkAux.mfwAvailable === false,
+    // Wave-D — pressure-tube break (direct-cycle only).
+    rbmkPipeBreak:     T.primaryTopology === 'direct' && state.cmd.rbmkPipeBreak === true,
+    // MSR-A — coolant-salt freeze + freeze-heater status (MSR only).
+    msrSaltFreeze:     !!state.msrRadiator && state.msrRadiator.coolantSaltFrozen === true,
+    msrFreezeHeaters:  !!state.msrRadiator && state.msrRadiator.freezeHeaterOn === true,
+    // MSR-B — off-gas loss + reactor-cell over-temp.
+    msrOffGasLost:     !!state.msrOffGas && state.msrOffGas.available === false,
+    msrCellHighTemp:   !!state.msrCell
+                        && state.msrCell.tempK > (T.msrCell?.highTempWarnK ?? 420),
+    // MSR-C — redox drifted oxidizing + accumulated corrosion.
+    msrRedoxHigh:      !!state.msrChem
+                        && state.msrChem.redoxRatio > (T.msrChem?.redoxWarnRatio ?? 1.8),
+    msrCorrosion:      !!state.msrChem
+                        && state.msrChem.corrosionIndex > (T.msrChem?.corrosionWarnIndex ?? 1.0),
     // III.4 — RCP seal LOCA SCRAM trip. Fires when stage-2 seal failure
     // has latched (cumulative ~76 gpm/pump, exceeds HHSI margin). PWR-
     // only via state.rcpSeal presence. Stage-3 implies stage-2, so any
@@ -316,10 +382,13 @@ export function stepRps(state, dt) {
     // (you do not let the auto controller restart the reactor by itself).
     if (state.autoRod) state.autoRod.enabled = false;
   }
-  // Scram drives rods in at scramSpeed
+  // Scram drives rods in at scramSpeed. Wave-C — RBMK CPS rod-cooling loss
+  // drags the rods, derating the scram drive (rbmkAux.scramSpeedFactor, 1.0
+  // normally).
   if (state.scramActive) {
-    state.rodBanks.regulating = Math.min(1, state.rodBanks.regulating + T.scramSpeed * dt);
-    state.rodBanks.safety = Math.min(1, state.rodBanks.safety + T.scramSpeed * dt);
+    const scramSpeed = T.scramSpeed * (state.rbmkAux?.scramSpeedFactor ?? 1);
+    state.rodBanks.regulating = Math.min(1, state.rodBanks.regulating + scramSpeed * dt);
+    state.rodBanks.safety = Math.min(1, state.rodBanks.safety + scramSpeed * dt);
     // Force valve closed during scram (overrides PI controller in plant.js)
     state.turbineValve = Math.max(0, state.turbineValve - 0.5 * dt);
   } else {

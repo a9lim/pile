@@ -22,6 +22,11 @@ import { stepRcpSeals } from './physics/rcp.js';
 import { stepEccs } from './physics/eccs.js';
 import { stepElectrical } from './physics/electrical.js';
 import { stepEdgs } from './physics/edgs.js';
+import { stepRbmkElectrical } from './physics/rbmk-electrical.js';
+import { stepRbmkEccs } from './physics/rbmk-eccs.js';
+import { stepRbmkAls } from './physics/rbmk-als.js';
+import { stepRbmkAux } from './physics/rbmk-aux.js';
+import { stepMsrAux } from './physics/msr-aux.js';
 import { stepAuxCooling } from './physics/aux-cooling.js';
 import { stepCvcs } from './physics/cvcs.js';
 import { stepAfw } from './physics/afw.js';
@@ -48,6 +53,10 @@ export function step(state, dt) {
   // containment.js and read by eccs.js on the next step (one-step lag).
   state._containmentMassInflowKgPerS = 0;
   state._containmentEnergyInflowWperS = 0;
+  // Wave-B — RBMK ALS steam-inflow accumulator (break / relief steam producers
+  // add to it; rbmk-als.js consumes it). Reset each step like the PWR
+  // containment accumulators above.
+  state._rbmkAlsSteamInflowKgPerS = 0;
   // Order matters. RPS first so commands and trips apply to this step.
   // Autopilot runs after RPS (so it sees scramActive set on this step) but
   // before neutronics (so its rod change takes effect on this step's flux).
@@ -69,6 +78,23 @@ export function step(state, dt) {
   // and before aux-cooling / cvcs / rcp / eccs (those read this step's
   // eccsBusEnergized / runningCount).
   stepEdgs(state, dt);
+  // Wave-B — RBMK auxiliary AC + DREG diesels + TG rundown. Computes
+  // state.rbmkElectrical.acAvailable; circulation.js gates the MCPs on it
+  // (one-step lag, like the PWR DC↔EDG ordering). No-op for PWR/MSR.
+  stepRbmkElectrical(state, dt);
+  // Wave-B — RBMK ECCS then ALS. ECCS computes per-half injection (folded into
+  // the drum balance by stepPlant later this step) and the pool draw; ALS
+  // consumes the draw + any break/relief steam inflow and owns the suppression
+  // pool. Run before neutronics/thermal so the injection lands this step.
+  stepRbmkEccs(state, dt);
+  stepRbmkAls(state, dt);
+  // Wave-C — RBMK auxiliary circuits (graphite gas circuit, CPS rod cooling,
+  // MFW pumps). Runs before stepThermal (sets the graphite over-heat term it
+  // reads) and before stepPlant (sets mfwAvailable for the drum controller).
+  stepRbmkAux(state, dt);
+  // MSR-B — off-gas system + reactor-cell containment. Runs before stepXenon
+  // (which reads msrOffGas.xeRemovalRateS for its sink). No-op for PWR/RBMK.
+  stepMsrAux(state, dt);
   // III.19 — CCW + SW. After EDGs (needs AC) and before CVCS / rcp /
   // eccs (those read this step's ccw.available).
   stepAuxCooling(state, dt);
@@ -220,9 +246,11 @@ function updateLoopOutputs(state, dt) {
   // per-loop primary flow: 0 when symmetric, climbs when an RCP trips or a
   // loop is isolated.
   if (state.loops) {
-    out.rcsMassFrac = state.rcsMassDesignKg > 0
-      ? state.rcsMassKg / state.rcsMassDesignKg
-      : 1;
+    // rcsMassFrac only applies to the PWR tracked-inventory model; RBMK has
+    // loopCount:2 but rcsMassDesignKg 0 → leave it null (gauge renders N/A).
+    if (state.rcsMassDesignKg > 0) {
+      out.rcsMassFrac = state.rcsMassKg / state.rcsMassDesignKg;
+    }
     let mMin = Infinity;
     let mMax = -Infinity;
     let mSum = 0;

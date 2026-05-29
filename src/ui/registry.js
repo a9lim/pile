@@ -825,6 +825,8 @@ function buildRbmk() {
   const zones = [
     { x: 40, y: 30, w: 920, h: 800, label: 'Confinement (partial)', partial: true },
     { x: 990, y: 30, w: 920, h: 800, label: 'Turbine Hall' },
+    // Wave-B/C — support + safety systems row(s) below the plant.
+    { x: 40, y: 858, w: 1870, h: 740, label: 'Support / Safety Systems' },
   ];
   const push = def => { components.push(def); return def; };
   const pipe = (kind, pts, extra) =>
@@ -855,6 +857,13 @@ function buildRbmk() {
         sld('Coolant flow', 0, 1.2, 0.001,
           s => s.cmd.coolantFlowTarget,
           (s, v) => { s.cmd.coolantFlowTarget = v; }, v => (v * 100).toFixed(0) + '%'),
+        ro('Total core flow', s => FMT.flowKgPerS(s.out.flowMassRateKgPerS ?? 0)),
+        ro('Loop A / B flow', s => `${(s.loops[0].massFlowKgPerS ?? 0).toFixed(0)} / ${(s.loops[1].massFlowKgPerS ?? 0).toFixed(0)} kg/s`),
+        ro('Loop spread', s => FMT.pct1(s.out.loopFlowSpreadFrac ?? 0),
+           s => band(s.out.loopFlowSpreadFrac ?? 0, 0.02, 0.10)),
+        ro('Flow regime', s => (s.out.flowRegime ?? 'forced').replace(/^./, c => c.toUpperCase()),
+           s => s.out.flowRegime === 'natural' ? COL.alarm
+              : (s.out.flowRegime === 'transition' ? COL.warn : '')),
         grp('Spatial modes'),
         sld('Tilt NW', -500, 500, 10, s => s.cmd.quadrantTiltPcm[0],
           (s, v) => { s.cmd.quadrantTiltPcm[0] = v; }, v => v.toFixed(0) + ' pcm'),
@@ -865,38 +874,255 @@ function buildRbmk() {
         sld('Tilt SE', -500, 500, 10, s => s.cmd.quadrantTiltPcm[3],
           (s, v) => { s.cmd.quadrantTiltPcm[3] = v; }, v => v.toFixed(0) + ' pcm'),
         ...detectorReadouts(),
+        grp('Fault injection'),
+        btn('Pressure-tube break (LOCA)', s => { s.cmd.rbmkPipeBreak = !s.cmd.rbmkPipeBreak; },
+          { danger: true, active: s => !!s.cmd.rbmkPipeBreak,
+            label2: s => s.cmd.rbmkPipeBreak ? 'ISOLATE BREAK' : 'Pressure-tube break (LOCA)' }),
+        note('The signature RBMK excursions emerge from the core physics: drop power + raise void (positive void coefficient at low power), or withdraw rods to a low ORM and then scram (graphite-tipped rods add positive ρ in the lower core first). A pressure-tube break drains the affected drum, depressurizes the circuit (→ ECCS), and vents steam to the ALS pool.'),
       ],
     },
   });
 
-  // Steam drum separator (0,0)
+  // Steam drum separators (0,0) — one per loop, level-controlled (Wave B)
+  const drumLoopFields = (l, name) => [
+    grp(name),
+    ro('Level', s => FMT.pct1(s.loops[l].drumLevel),
+       s => bandLow(s.loops[l].drumLevel, 0.30, 0.25)),
+    bar('Drum level', s => s.loops[l].drumLevel),
+    ro('Feedwater', s => FMT.flowKgPerS(s.loops[l].fwFlowKgPerS ?? 0)),
+    ro('Steam out', s => FMT.flowKgPerS(s.loops[l].steamFlowKgPerS ?? 0)),
+  ];
   push({
-    id: 'drum', kind: 'vessel', ...G.cell(0, 0),
-    label: 'DRUM SEP', sub: 'steam separator',
-    readout: s => [FMT.pressureMPa(s.sgSecondaryP)],
+    id: 'drum', kind: 'drum', ...G.cell(0, 0),
+    label: 'DRUM SEP', sub: 'steam separators',
+    readout: s => [FMT.pressureMPa(s.sgSecondaryP),
+                   FMT.pct(Math.min(s.loops[0].drumLevel, s.loops[1].drumLevel)) + ' lvl'],
     tint: () => '--coolant-hot',
+    alarm: s => s.loops.some(l => !l.isolated && l.drumLevel < 0.25),
     inspector: {
-      title: 'Steam Drum Separator',
+      title: 'Steam Drum Separators (per loop)',
       fields: [
+        grp('Common'),
         ro('Drum pressure', s => FMT.pressureMPa(s.sgSecondaryP)),
         ro('Steam flow', s => FMT.flowKgPerS(s.out.steamFlow ?? 0)),
-        note('Direct-cycle: the drum separates the steam–water mix from the pressure tubes; dry steam goes straight to the turbine.'),
+        ro('Feedwater', s => s.cmd.mainFwTrip ? 'TRIPPED' : 'auto',
+           s => s.cmd.mainFwTrip ? COL.alarm : ''),
+        note('Direct-cycle: each loop’s drum separates the steam–water mix from its pressure tubes; dry steam goes to the turbine, water recirculates via the downcomers. A 3-element controller feeds water to hold level; loss of feedwater drains the drums toward the low-level scram.'),
+        ...drumLoopFields(0, 'Loop A (left)'),
+        ...drumLoopFields(1, 'Loop B (right)'),
+        grp('Fault injection'),
+        btn('Trip feedwater', s => { s.cmd.mainFwTrip = !s.cmd.mainFwTrip; },
+          { danger: true, active: s => !!s.cmd.mainFwTrip,
+            label2: s => s.cmd.mainFwTrip ? 'RESTORE FEEDWATER' : 'Trip feedwater' }),
       ],
     },
   });
 
-  // Main circulation pump (1,1)
+  // Main circulation pumps — two-loop MCC (Wave A). One representative
+  // running MCP (+ 1 standby) per loop; left/right core halves. The single
+  // schematic icon controls both loops via the per-loop inspector below; the
+  // visual two-pump split + bespoke pump shapes land in the Part-3 layout pass.
+  const mcpStatus = l => s => {
+    const lp = s.loops[l];
+    if (lp.isolated) return 'ISOLATED';
+    if (lp.cavitating) return 'CAVITATING';
+    if (!lp.rcpRunning) return 'COASTDOWN';
+    return 'RUNNING';
+  };
+  const mcpStatusCol = l => s => {
+    const lp = s.loops[l];
+    if (lp.isolated || lp.cavitating) return COL.alarm;
+    return lp.rcpRunning ? '' : COL.warn;
+  };
+  const mcpLoopFields = (l, name) => [
+    grp(name),
+    ro('Status', mcpStatus(l), mcpStatusCol(l)),
+    ro('Loop flow', s => FMT.flowKgPerS(s.loops[l].massFlowKgPerS)),
+    ro('Suction subcool', s => s.loops[l].suctionSubcoolK.toFixed(1) + ' K',
+       s => s.loops[l].cavitating ? COL.alarm : bandLow(s.loops[l].suctionSubcoolK, 5, 2)),
+    tog('MCP running', s => !(s.cmd.rcpRunning[l] === false),
+      (s, v) => { s.cmd.rcpRunning[l] = v; }),
+    tog('Loop isolated', s => !!s.cmd.loopIsolated[l],
+      (s, v) => { s.cmd.loopIsolated[l] = v; }),
+  ];
   push({
     id: 'mcp', kind: 'pump', ...G.sq(1, 1),
-    label: 'MCP', sub: 'recirc pump',
-    readout: s => [FMT.flowKgPerS(s.out.flowMassRateKgPerS ?? 0)],
+    label: 'MCP', sub: 'recirc pumps',
+    readout: s => [FMT.flowKgPerS(s.out.flowMassRateKgPerS ?? 0),
+                   (s.out.flowRegime ?? 'forced')],
+    alarm: s => s.loops.some(lp => lp.cavitating || lp.isolated),
     inspector: {
-      title: 'Main Circulation Pump',
+      title: 'Main Circulation Pumps (two-loop MCC)',
       fields: [
-        ro('Mass flow', s => FMT.flowKgPerS(s.out.flowMassRateKgPerS ?? 0)),
-        ro('Flow regime', s => (s.out.flowRegime ?? 'forced')),
-        sld('Coolant flow', 0, 1.2, 0.001, s => s.cmd.coolantFlowTarget,
+        grp('Core total'),
+        ro('Total core flow', s => FMT.flowKgPerS(s.out.flowMassRateKgPerS ?? 0)),
+        ro('Flow regime', s => (s.out.flowRegime ?? 'forced').replace(/^./, c => c.toUpperCase()),
+           s => s.out.flowRegime === 'natural' ? COL.alarm
+              : (s.out.flowRegime === 'transition' ? COL.warn : '')),
+        ro('Loop spread', s => FMT.pct1(s.out.loopFlowSpreadFrac ?? 0),
+           s => band(s.out.loopFlowSpreadFrac ?? 0, 0.02, 0.10)),
+        sld('Master flow demand', 0, 1.2, 0.001, s => s.cmd.coolantFlowTarget,
           (s, v) => { s.cmd.coolantFlowTarget = v; }, v => (v * 100).toFixed(0) + '%'),
+        note('Each loop cools one core half through its own MCP set, distribution headers and drum separator. Tripping one loop’s MCP coasts that half into natural circulation — a single-MCP-trip asymmetry. Low suction subcooling cavitates the pump and derates its flow.'),
+        ...mcpLoopFields(0, 'Loop A (left)'),
+        ...mcpLoopFields(1, 'Loop B (right)'),
+      ],
+    },
+  });
+
+  // Electrical / DREG diesels + TG rundown (0,2) — Wave B
+  push({
+    id: 'elec', kind: 'vessel', ...G.cell(0, 2),
+    label: 'ELEC / DREG', sub: 'aux AC · diesels · rundown',
+    readout: s => [s.rbmkElectrical ? (s.rbmkElectrical.acAvailable ? 'AC OK' : 'BLACKOUT') : '—',
+                   s.rbmkElectrical ? `${s.rbmkElectrical.runningCount}/${s.rbmkElectrical.dgUnits.length} DG` : ''],
+    alarm: s => s.rbmkElectrical && (!s.rbmkElectrical.acAvailable || s.rbmkElectrical.anyDgFaulted),
+    inspector: {
+      title: 'Auxiliary Electrical / DREG',
+      fields: [
+        grp('Buses'),
+        ro('AC supply', s => s.rbmkElectrical?.acAvailable ? 'AVAIL' : 'LOST',
+           s => okCol(!!s.rbmkElectrical?.acAvailable)),
+        ro('Offsite power', s => s.rbmkElectrical?.offsiteAvailable ? 'AVAIL' : 'LOST',
+           s => okCol(!!s.rbmkElectrical?.offsiteAvailable)),
+        ro('Diesels running', s => s.rbmkElectrical
+           ? `${s.rbmkElectrical.runningCount}/${s.rbmkElectrical.dgUnits.length}` : '—',
+           s => s.rbmkElectrical && s.rbmkElectrical.runningCount > 0 ? COL.warn : ''),
+        ro('TG rundown', s => s.rbmkElectrical?.rundownActive
+           ? `ACTIVE ${(s.rbmkElectrical.rundownEnergy * 100).toFixed(0)}%` : 'idle',
+           s => s.rbmkElectrical?.rundownActive ? COL.warn : ''),
+        grp('Operator actions'),
+        btn('Loss of offsite power', s => { s.cmd.lossOfOffsitePower = !s.cmd.lossOfOffsitePower; },
+          { danger: true, active: s => !!s.cmd.lossOfOffsitePower,
+            label2: s => s.cmd.lossOfOffsitePower ? 'RESTORE OFFSITE' : 'Loss of offsite power' }),
+        btn('Start all diesels', s => {
+          if (Array.isArray(s.cmd.rbmkDgManualStart)) s.cmd.rbmkDgManualStart.fill(true);
+        }, { active: s => Array.isArray(s.cmd.rbmkDgManualStart) && s.cmd.rbmkDgManualStart.every(Boolean) }),
+        grp('Fault injection'),
+        btn('Fault diesel 1', s => {
+          if (Array.isArray(s.cmd.rbmkDgFault))
+            s.cmd.rbmkDgFault[0] = s.cmd.rbmkDgFault[0] === 'none' ? 'mechanical' : 'none';
+        }, { danger: true, active: s => Array.isArray(s.cmd.rbmkDgFault) && s.cmd.rbmkDgFault[0] !== 'none' }),
+        note('On loss of offsite power the diesels start after ~15 s; the coasting turbo-generator back-feeds the buses (rundown) to bridge the gap and keep the MCPs spinning. A station blackout (no offsite, no diesel, rundown spent) coasts the pumps into natural circulation.'),
+      ],
+    },
+  });
+
+  // ECCS / САОР (1,2) — Wave B
+  push({
+    id: 'eccs', kind: 'tank', ...G.cell(1, 2),
+    label: 'ECCS', sub: 'САОР · accumulators + pumps',
+    readout: s => [s.rbmkEccs ? (s.rbmkEccs.actuated ? 'ACTUATED' : 'armed') : '—',
+                   s.rbmkEccs ? FMT.flowKgPerS(s.rbmkEccs.totalInjectionKgPerS) : ''],
+    tint: () => '--coolant-cold',
+    alarm: s => s.rbmkEccs && s.rbmkEccs.actuated,
+    inspector: {
+      title: 'Emergency Core Cooling (САОР)',
+      fields: [
+        grp('Injection'),
+        ro('Status', s => s.rbmkEccs?.actuated ? 'ACTUATED' : 'armed',
+           s => s.rbmkEccs?.actuated ? COL.warn : ''),
+        ro('Total injection', s => FMT.flowKgPerS(s.rbmkEccs?.totalInjectionKgPerS ?? 0)),
+        ro('Pumped (pool)', s => FMT.flowKgPerS(s.rbmkEccs?.pumpFlowKgPerS ?? 0)),
+        ro('Accumulators', s => s.rbmkEccs
+           ? `${s.rbmkEccs.accumulators.filter(a => a.flowing).length}/${s.rbmkEccs.accumulators.length} flowing` : '—'),
+        ro('Accum inventory', s => s.rbmkEccs
+           ? s.rbmkEccs.accumulators.reduce((t, a) => t + a.inventoryM3, 0).toFixed(0) + ' m³' : '—'),
+        grp('Operator actions'),
+        btn('Manual ECCS', s => { s.cmd.rbmkEccsManual = !s.cmd.rbmkEccsManual; },
+          { danger: true, active: s => !!s.cmd.rbmkEccsManual }),
+        btn('ECCS reset', s => { s.cmd.rbmkEccsReset = true; s.cmd.rbmkEccsManual = false; }),
+        note('Fast N₂ accumulators (passive) + AC-gated pumps drawing from the ALS suppression pool inject makeup into the two core halves on low drum level / pressure.'),
+      ],
+    },
+  });
+
+  // Accident Localization System / suppression pool (2,2) — Wave B
+  push({
+    id: 'als', kind: 'tank', ...G.cell(2, 2),
+    label: 'ALS POOL', sub: 'pressure suppression',
+    readout: s => [s.rbmkAls ? FMT.pressureMPa(s.rbmkAls.compartmentPressureMPa) : '—',
+                   s.rbmkAls ? FMT.tempC(s.rbmkAls.poolTempK) : ''],
+    tint: () => '--coolant-cold',
+    alarm: s => s.rbmkAls && s.rbmkAls.compartmentPressureMPa > 0.13,
+    inspector: {
+      title: 'Accident Localization System',
+      fields: [
+        grp('Suppression pool'),
+        ro('Compartment P', s => FMT.pressureMPa(s.rbmkAls?.compartmentPressureMPa ?? 0.1),
+           s => band(s.rbmkAls?.compartmentPressureMPa ?? 0.1, 0.13, 0.30)),
+        ro('Pool temp', s => FMT.tempC(s.rbmkAls?.poolTempK ?? 308),
+           s => band(s.rbmkAls?.poolTempK ?? 308, 350, 380)),
+        ro('Pool inventory', s => (s.rbmkAls?.poolInventoryM3 ?? 0).toFixed(0) + ' m³'),
+        ro('Sprays', s => s.rbmkAls?.sprayActive ? 'ACTIVE' : 'off',
+           s => s.rbmkAls?.sprayActive ? COL.warn : ''),
+        note('No Western-style containment — the RBMK lower compartments vent a pipe break’s steam through this pressure-suppression pool, which condenses it. The pool is also the long-term ECCS water source.'),
+      ],
+    },
+  });
+
+  // Main feedwater pumps (3,2) — Wave C
+  push({
+    id: 'mfw', kind: 'pump', ...G.sq(3, 2),
+    label: 'MFW PUMPS', sub: 'main feedwater',
+    readout: s => [s.rbmkAux ? (s.rbmkAux.mfwAvailable ? 'RUNNING' : 'TRIPPED') : '—'],
+    alarm: s => s.rbmkAux && !s.rbmkAux.mfwAvailable,
+    inspector: {
+      title: 'Main Feedwater Pumps',
+      fields: [
+        ro('Status', s => s.rbmkAux?.mfwAvailable ? 'RUNNING' : 'TRIPPED',
+           s => s.rbmkAux?.mfwAvailable ? '' : COL.alarm),
+        ro('Total feedwater', s => FMT.flowKgPerS(
+           (s.loops?.[0]?.fwFlowKgPerS ?? 0) + (s.loops?.[1]?.fwFlowKgPerS ?? 0))),
+        btn('Trip feedwater pumps', s => { s.cmd.rbmkMfwTrip = !s.cmd.rbmkMfwTrip; },
+          { danger: true, active: s => !!s.cmd.rbmkMfwTrip,
+            label2: s => s.cmd.rbmkMfwTrip ? 'RESTORE MFW' : 'Trip feedwater pumps' }),
+        note('AC-powered main feedwater pumps feed the drum separators. They die on a station blackout, draining the drums toward the low-level scram.'),
+      ],
+    },
+  });
+
+  // Graphite gas circuit (0,3) — Wave C
+  push({
+    id: 'gas', kind: 'hx', ...G.cell(0, 3),
+    label: 'GAS CIRCUIT', sub: 'He/N₂ graphite cooling',
+    readout: s => [s.rbmkAux ? (s.rbmkAux.gasCoolingOk ? 'COOLING' : 'LOST') : '—',
+                   s.rbmkAux ? FMT.tempC(s.rbmkAux.avgGraphiteTempK) : ''],
+    tint: () => '--gamma',
+    alarm: s => s.rbmkAux && (!s.rbmkAux.gasCoolingOk
+      || s.rbmkAux.avgGraphiteTempK > 1373),
+    inspector: {
+      title: 'Graphite Gas Circuit',
+      fields: [
+        ro('Gas cooling', s => s.rbmkAux?.gasCoolingOk ? 'OK' : 'LOST',
+           s => okCol(!!s.rbmkAux?.gasCoolingOk)),
+        ro('Avg graphite temp', s => FMT.tempC(s.rbmkAux?.avgGraphiteTempK ?? 0),
+           s => band(s.rbmkAux?.avgGraphiteTempK ?? 0, 1273, 1373)),
+        ro('Stack cooling', s => ((s.rbmkAux?.graphiteCoolingFactor ?? 1) * 100).toFixed(0) + '%',
+           s => (s.rbmkAux?.graphiteCoolingFactor ?? 1) < 0.99 ? COL.warn : ''),
+        btn('Trip gas circulators', s => { s.cmd.rbmkGasCircuitTrip = !s.cmd.rbmkGasCircuitTrip; },
+          { danger: true, active: s => !!s.cmd.rbmkGasCircuitTrip }),
+        note('The graphite stack sits in a circulated He/N₂ atmosphere that prevents oxidation and carries stack heat to the channels. Loss of circulation overheats the graphite, feeding the (positive-at-low-power) moderator coefficient.'),
+      ],
+    },
+  });
+
+  // CPS rod-cooling circuit (1,3) — Wave C
+  push({
+    id: 'cps', kind: 'hx', ...G.cell(1, 3),
+    label: 'CPS COOLING', sub: 'control-rod cooling',
+    readout: s => [s.rbmkAux ? (s.rbmkAux.cpsCoolingOk ? 'OK' : 'LOST') : '—'],
+    alarm: s => s.rbmkAux && !s.rbmkAux.cpsCoolingOk,
+    inspector: {
+      title: 'CPS Rod-Cooling Circuit',
+      fields: [
+        ro('Cooling', s => s.rbmkAux?.cpsCoolingOk ? 'OK' : 'LOST',
+           s => okCol(!!s.rbmkAux?.cpsCoolingOk)),
+        ro('Scram drive', s => ((s.rbmkAux?.scramSpeedFactor ?? 1) * 100).toFixed(0) + '%',
+           s => (s.rbmkAux?.scramSpeedFactor ?? 1) < 1 ? COL.alarm : ''),
+        btn('Trip CPS cooling', s => { s.cmd.rbmkCpsCoolingTrip = !s.cmd.rbmkCpsCoolingTrip; },
+          { danger: true, active: s => !!s.cmd.rbmkCpsCoolingTrip }),
+        note('Cools the control-rod channels separately from the main circuit. Loss makes the rods drag — derating the already-slow (~21 s) scram drive.'),
       ],
     },
   });
@@ -916,7 +1142,7 @@ function buildRbmk() {
   pipe('feed', [[1570, 726], [1570, 830], [480, 830], [480, 330], [430, 330]],
     { flow: s => s.turbineValve });
 
-  return { viewBox: { x: 0, y: 0, w: 1990, h: 880 }, zones, components, pipes };
+  return { viewBox: { x: 0, y: 0, w: 1990, h: 1640 }, zones, components, pipes };
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -932,8 +1158,8 @@ function buildMsr() {
   const pipes = [];
   const G = makeGrid({ x0: 70, y0: 70, cw: 320, ch: 300, gap: 70 });
   const zones = [
-    { x: 40, y: 30, w: 1190, h: 740, label: 'Reactor Cell' },
-    { x: 1260, y: 30, w: 850, h: 740, label: 'Turbine Hall' },
+    { x: 40, y: 30, w: 800, h: 740, label: 'Reactor Cell' },
+    { x: 860, y: 30, w: 770, h: 740, label: 'Heat Rejection (air radiator)' },
   ];
   const push = def => { components.push(def); return def; };
   const pipe = (kind, pts, extra) =>
@@ -1015,34 +1241,132 @@ function buildMsr() {
   // Primary salt pump (1,1)
   push({
     id: 'primary-pump', kind: 'pump', ...G.sq(1, 1),
-    label: 'SALT PUMP', sub: 'primary',
+    label: 'FUEL PUMP', sub: 'salt pump + bowl',
     readout: s => [FMT.flowKgPerS(s.out.flowMassRateKgPerS ?? 0)],
     inspector: {
-      title: 'Primary Salt Pump',
+      title: 'Fuel-Salt Pump + Pump Bowl',
       fields: [
         ro('Mass flow', s => FMT.flowKgPerS(s.out.flowMassRateKgPerS ?? 0)),
+        ro('Bowl level', s => s.msrPumpBowl ? FMT.pct1(s.msrPumpBowl.levelFrac) : '—'),
+        ro('Salt charge', s => s.msrPumpBowl ? (s.msrPumpBowl.saltMassKg).toFixed(0) + ' kg' : '—'),
         sld('Salt flow', 0, 1.2, 0.001, s => s.cmd.coolantFlowTarget,
           (s, v) => { s.cmd.coolantFlowTarget = v; }, v => (v * 100).toFixed(0) + '%'),
+        note('The pump bowl has a helium gas space above the salt — where the off-gas system sparges out ⁱ³⁵Xe / Kr (the off-gas subsystem clicks separately). Tripping the fuel pump strands the circulating delayed-neutron precursors in-core, inserting positive reactivity.'),
       ],
     },
   });
 
-  // Steam generator (2,0)
+  // MSR-A — air-cooled radiator (2,0). Replaces the steam generator; MSRE
+  // rejected its heat to the atmosphere, not a turbine.
   push({
-    id: 'sg', kind: 'vessel', ...G.cell(2, 0),
-    label: 'STEAM GEN', sub: '',
-    readout: s => [FMT.pressureMPa(s.sgSecondaryP)],
+    id: 'radiator', kind: 'radiator', ...G.cell(2, 0),
+    label: 'AIR RADIATOR', sub: 'salt → air',
+    readout: s => [s.msrRadiator ? FMT.power(s.msrRadiator.heatRejectedMW) : '—',
+                   s.msrRadiator ? FMT.tempC(s.msrRadiator.coolantSaltTempK) : ''],
     tint: () => '--coolant-hot',
+    alarm: s => s.msrRadiator && s.msrRadiator.coolantSaltFrozen,
     inspector: {
-      title: 'Steam Generator',
+      title: 'Air-Cooled Radiator',
       fields: [
-        ro('Intermediate T', s => FMT.tempC(s.intermediateLoopT)),
-        ro('Steam pressure', s => FMT.pressureMPa(s.sgSecondaryP)),
+        grp('Heat rejection'),
+        ro('Heat rejected', s => FMT.power(s.msrRadiator?.heatRejectedMW ?? 0)),
+        ro('Coolant salt T', s => FMT.tempC(s.msrRadiator?.coolantSaltTempK ?? 0),
+           s => s.msrRadiator?.coolantSaltFrozen ? COL.alarm
+              : bandLow(s.msrRadiator?.coolantSaltTempK ?? 999, 783, 727)),
+        ro('Air outlet', s => FMT.tempC(s.msrRadiator?.airOutletTempK ?? 0)),
+        ro('Salt state', s => s.msrRadiator?.coolantSaltFrozen ? 'FROZEN' : 'molten',
+           s => s.msrRadiator?.coolantSaltFrozen ? COL.alarm : ''),
+        ro('Freeze heaters', s => s.msrRadiator?.freezeHeaterOn ? 'ON' : 'off',
+           s => s.msrRadiator?.freezeHeaterOn ? COL.warn : ''),
+        grp('Doors'),
+        sld('Bypass doors', 0, 1, 0.01, s => s.cmd.msrBypassDoors ?? 0,
+          (s, v) => { s.cmd.msrBypassDoors = v; }, v => (v * 100).toFixed(0) + '%'),
+        btn('Trip freeze heaters', s => { s.cmd.msrFreezeHeaterTrip = !s.cmd.msrFreezeHeaterTrip; },
+          { danger: true, active: s => !!s.cmd.msrFreezeHeaterTrip }),
+        note('The coolant salt dumps reactor heat to the air through a finned radiator. Blower speed sets the power demand; bypass doors and freeze heaters keep the salt above its liquidus when cold.'),
       ],
     },
   });
 
-  turbineIsland(components, pipes, G, 3);
+  // MSR-A — main blower (3,0): the power-control actuator.
+  push({
+    id: 'blower', kind: 'pump', ...G.sq(3, 0),
+    label: 'BLOWER', sub: 'radiator air',
+    readout: s => [((s.cmd.msrBlowerSpeed ?? 1) * 100).toFixed(0) + '%'],
+    inspector: {
+      title: 'Radiator Main Blower',
+      fields: [
+        ro('Blower speed', s => ((s.cmd.msrBlowerSpeed ?? 1) * 100).toFixed(0) + '%'),
+        ro('Heat rejected', s => FMT.power(s.msrRadiator?.heatRejectedMW ?? 0)),
+        sld('Blower speed', 0, 1.5, 0.01, s => s.cmd.msrBlowerSpeed ?? 1,
+          (s, v) => { s.cmd.msrBlowerSpeed = v; }, v => (v * 100).toFixed(0) + '%'),
+        note('Forces air across the radiator. More airflow → more heat removed → the salt cools → the huge MSR Doppler raises power to match. The blower is the MSR’s primary power-control actuator.'),
+      ],
+    },
+  });
+
+  // MSR-B — off-gas system (4,0)
+  push({
+    id: 'offgas', kind: 'tank', ...G.cell(4, 0),
+    label: 'OFF-GAS', sub: 'He sparge · charcoal',
+    readout: s => [s.msrOffGas ? (s.msrOffGas.available ? 'STRIPPING' : 'LOST') : '—'],
+    tint: () => '--gamma',
+    alarm: s => s.msrOffGas && !s.msrOffGas.available,
+    inspector: {
+      title: 'Off-Gas System',
+      fields: [
+        ro('Status', s => s.msrOffGas?.available ? 'STRIPPING Xe/Kr' : 'LOST',
+           s => okCol(!!s.msrOffGas?.available)),
+        ro('Charcoal loading', s => s.msrOffGas ? FMT.pct1(s.msrOffGas.charcoalLoadingFrac) : '—'),
+        ro('Core xenon', s => FMT.pct1((s.xenon[s.N >> 1] ?? 0)),
+           s => band((s.xenon[s.N >> 1] ?? 0), 1.2, 1.6)),
+        btn('Trip off-gas sparge', s => { s.cmd.msrOffGasTrip = !s.cmd.msrOffGasTrip; },
+          { danger: true, active: s => !!s.cmd.msrOffGasTrip }),
+        note('Helium bubbled through the pump bowl carries ¹³⁵Xe and Kr out of the fuel salt to charcoal-bed holdup, where they decay. This is why an MSR’s xenon poisoning is small — lose the sparge and xenon builds back up.'),
+      ],
+    },
+  });
+
+  // MSR-B — sealed reactor cell containment (3,1)
+  push({
+    id: 'cell', kind: 'vessel', ...G.cell(3, 1),
+    label: 'REACTOR CELL', sub: 'sealed · inert',
+    readout: s => [s.msrCell ? FMT.tempC(s.msrCell.tempK) : '—',
+                   s.msrCell ? FMT.pressureMPa(s.msrCell.pressureMPa) : ''],
+    tint: () => '--coolant-cold',
+    alarm: s => s.msrCell && s.msrCell.tempK > 420,
+    inspector: {
+      title: 'Reactor Cell Containment',
+      fields: [
+        ro('Cell temperature', s => FMT.tempC(s.msrCell?.tempK ?? 0),
+           s => band(s.msrCell?.tempK ?? 0, 400, 420)),
+        ro('Cell pressure', s => FMT.pressureMPa(s.msrCell?.pressureMPa ?? 0)),
+        note('The reactor and drain-tank cells are sealed and inert (N₂), slightly subatmospheric, with a vapor-condensing system — the MSR analog of containment. They take the drain-tank afterheat.'),
+      ],
+    },
+  });
+
+  // MSR-C — fuel-salt chemistry (4,1)
+  push({
+    id: 'chem', kind: 'hx', ...G.cell(4, 1),
+    label: 'CHEMISTRY', sub: 'redox · corrosion',
+    readout: s => [s.msrChem ? 'U⁴⁺/U³⁺ ' + s.msrChem.redoxRatio.toFixed(2) : '—'],
+    alarm: s => s.msrChem && (s.msrChem.redoxRatio > 1.8 || s.msrChem.corrosionIndex > 1.0),
+    inspector: {
+      title: 'Fuel-Salt Chemistry',
+      fields: [
+        ro('Redox (U⁴⁺/U³⁺)', s => (s.msrChem?.redoxRatio ?? 1).toFixed(2),
+           s => band(s.msrChem?.redoxRatio ?? 1, 1.5, 1.8)),
+        ro('Corrosion index', s => (s.msrChem?.corrosionIndex ?? 0).toFixed(2),
+           s => band(s.msrChem?.corrosionIndex ?? 0, 0.5, 1.0)),
+        ro('Reductant', s => s.msrChem?.reductantOn ? 'ADDING' : 'off',
+           s => s.msrChem?.reductantOn ? COL.warn : ''),
+        btn('Add reductant (Be / UF₃)', s => { s.cmd.msrRedoxControl = !s.cmd.msrRedoxControl; },
+          { active: s => !!s.cmd.msrRedoxControl }),
+        note('Fission frees fluorine, drifting the salt oxidizing (U⁴⁺/U³⁺ up), which corrodes the Hastelloy. Periodic reductant addition holds the redox in-band — online chemistry control, an MSR-defining operation.'),
+      ],
+    },
+  });
 
   // Primary salt loop: core → IHX → pump → core.
   pipe('hot', [[390, 220], [460, 220]],
@@ -1054,17 +1378,15 @@ function buildMsr() {
   // Drain path: core → freeze plug → drain tank (flows only when melted).
   pipe('cold', [[230, 370], [230, 440]],
     { flow: s => (s.freezePlugMelted ? 1 : 0) });
-  // Intermediate loop: IHX ↔ SG.
+  // Coolant-salt loop: IHX ↔ radiator.
   pipe('intermediate', [[780, 190], [850, 190]],
     { flow: s => s.coolantFlowFrac, temp: s => s.intermediateLoopT });
   pipe('intermediate', [[850, 250], [780, 250]],
     { flow: s => s.coolantFlowFrac, temp: s => s.intermediateLoopT });
-  // SG → turbine steam, feed pump → SG return.
-  pipe('steam', [[1170, 220], [1240, 220]], { flow: s => s.turbineValve });
-  pipe('feed', [[1790, 680], [1790, 790], [1010, 790], [1010, 370]],
-    { flow: s => s.turbineValve });
+  // Radiator → blower air path (cosmetic).
+  pipe('steam', [[1170, 220], [1240, 220]], { flow: s => s.cmd.msrBlowerSpeed ?? 1 });
 
-  return { viewBox: { x: 0, y: 0, w: 2010, h: 850 }, zones, components, pipes };
+  return { viewBox: { x: 0, y: 0, w: 1660, h: 850 }, zones, components, pipes };
 }
 
 // ════════════════════════════════════════════════════════════════════════

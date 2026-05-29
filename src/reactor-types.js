@@ -666,6 +666,29 @@ export const TYPES = Object.freeze({
     turbineValveOpen: 1.0,
     nominalGridLoadMW: 1000,
     defaultAccelLow: 1,
+    // Wave-A (RBMK) — two-loop Main Circulation Circuit. The real RBMK-1000
+    // has TWO independent KMPC loops (left/right core halves), each with 4
+    // MCPs (3 running + 1 standby) feeding the pressure tubes through
+    // distribution group headers, and steam-water risers returning to that
+    // loop's drum separators. We model the genuine 2-loop split (so ECCS can
+    // inject into the two halves separately and single-MCP-trip asymmetry is
+    // first-class) but collapse the 4-MCPs-per-loop redundancy to one
+    // representative running MCP + one standby per loop — the same usability
+    // collapse the PWR uses (4 loops → 1). loopCount drives state.loops, the
+    // cmd.rcpRunning/loopIsolated arrays, and routes circulation.js to its
+    // per-loop path. The core neutronics/thermal mesh stays a single shared
+    // 1-D axial mesh; the loops are a plant-side flow split whose summed flow
+    // feeds the single combined multichannel void walk (see circulation.js /
+    // multichannel.js headers). Each loop carries coolantMassFlowKgPerS/2.
+    loopCount: 2,
+    // mcpCavitationModel gates the RBMK-only MCP suction-cavitation hook in
+    // circulation.js: when downcomer subcooling at the pump suction collapses
+    // (low drum pressure / hot return), the MCP cavitates and its forced flow
+    // derates. At init the downcomer is ~11 K subcooled (drum 6.5 MPa, Tsat
+    // ≈ 281 °C vs 270 °C inlet) so the derate is 1.0 — critical-by-construction
+    // safe. mcpCavitationSubcoolK is the margin below which derate begins.
+    mcpCavitationModel: true,
+    mcpCavitationSubcoolK: 2.0,
     // RBMK starts with rods at 0.85 — well past the "rod insertion adds positive
     // ρ via graphite tip" zone (which crosses zero around rod=0.815 with current
     // c_g/c_b calibration) and into the boron-dominant regime. From here, the
@@ -728,6 +751,75 @@ export const TYPES = Object.freeze({
       gainAz: 4e-4,
       gainRad: 4e-4,
     },
+    // Wave-B — per-loop drum-separator water-level control. Each loop's drum
+    // gains feedwater and loses the steam drawn to the turbine (apportioned by
+    // loop flow); a 3-element-style controller (steam-flow feedforward + level
+    // PI) drives feedwater to hold levelSetpoint. designWaterMassKg is the drum
+    // water inventory per full level span (kg) — sets the level transient
+    // timescale, not the init state (dLevel/dt == 0 at the setpoint). Low level
+    // SCRAMs (channel dryout risk); high level WARNs (moisture carryover to the
+    // turbine). At init feedwater feedforward == turbine steam draw, so the
+    // core-inlet blend temperature (state._coolantReturnT) is unchanged →
+    // critical-by-construction preserved.
+    rbmkDrum: {
+      designWaterMassKg: 100000,   // per loop, kg per full (0→1) level span
+      levelSetpoint: 0.5,
+      fwKp: 2500,                  // kg/s per unit level error
+      fwKi: 60,                    // kg/s per (unit level · s)
+      maxFwKgPerS: 4000,           // feedwater controller clamp
+      lowLevelScram: 0.25,
+      highLevelWarn: 0.85,
+    },
+    // Wave-B — RBMK auxiliary AC + DREG emergency diesels + turbo-generator
+    // rundown. dgCount diesels start on LOOP after dgStartDelaySec; the
+    // coasting main generator back-feeds the buses for ~rundownTauSec (the
+    // Chernobyl-experiment coastdown). See physics/rbmk-electrical.js.
+    rbmkElectrical: {
+      dgCount: 3,
+      dgStartDelaySec: 15,
+      dgFuelEnduranceSec: 6.048e5,   // ~7 days at full load
+      lowFuelFrac: 0.1,
+      rundownTauSec: 45,             // TG coastdown e-fold
+    },
+    // Wave-B — RBMK ECCS (САОР). Fast N₂ accumulators + AC-gated pool-fed
+    // pumps inject into the two core halves on low drum level / pressure /
+    // manual. See physics/rbmk-eccs.js.
+    rbmkEccs: {
+      accumulatorCount: 6,
+      accumulatorVolumeM3: 25,        // per accumulator
+      accumulatorFlowKgPerS: 200,     // per accumulator while discharging
+      pumpFlowKgPerS: 600,            // total pumped (pool-fed) injection
+      actuationDrumLevel: 0.30,
+      actuationDrumPressureMPa: 4.0,
+      actuationAlsPressureMPa: 0.13,  // ALS over-pressure = break detected
+    },
+    // Wave-B — RBMK Accident Localization System (СЛА): leak-tight lower
+    // compartments + pressure-suppression pool (bubbler pond). Condenses pipe-
+    // break steam and is the long-term ECCS water source. See physics/rbmk-als.js.
+    rbmkAls: {
+      poolInventoryM3: 3000,
+      poolCondenseCapKgPerS: 800,
+      pressurePerKgPerS: 5e-5,
+      baselineP: 0.1,
+      relaxTauSec: 60,
+      poolCoolerUaWperK: 5e5,
+      ultimateSinkK: 308,
+      spraySetpointMPa: 0.13,
+      highPressureWarnMPa: 0.13,
+    },
+    // Wave-C — RBMK auxiliary circuits: graphite gas circuit (He/N₂), CPS
+    // rod-cooling, main feedwater pumps. All AC-powered. See physics/rbmk-aux.js.
+    rbmkAux: {
+      graphiteCoolingLossFactor: 0.5, // graphite→coolant cooling × this on gas-circuit loss
+      graphiteCoolingTauSec: 120,
+      highGraphiteTempWarnK: 1373,    // ~1100 °C
+      cpsCoolingScramDerate: 0.5,     // scram speed × this when rod cooling lost
+      mfwPumpCount: 2,
+    },
+    // Wave-D — pressure-tube break (LOCA). Drains the affected loop's drum,
+    // depressurizes the circuit (→ ECCS low-pressure actuation), and vents
+    // steam to the ALS suppression pool. See physics/plant.js stepRbmkPlant.
+    rbmkBreak: { breakFlowKgPerS: 500 },
     // III.10 — RBMK regenerative feedwater heating. The direct-cycle
     // RBMK condenses turbine exhaust and reheats it through a shorter
     // heater chain to a design feedwater temperature of ~165 °C (the
@@ -807,6 +899,34 @@ export const TYPES = Object.freeze({
     drainTankPassiveUaWPerK: 2.5e4,  // passive drain-tank cooling to cell air
     xenonOffGasRateS: 1 / 60,        // s⁻¹ removal rate (~60s e-fold noble-gas residence)
     defaultAccelLow: 1,
+    // MSR-A — air-cooled radiator heat sink (the real MSRE rejected 8 MWth to
+    // the atmosphere through a salt→air radiator with a main blower + bypass
+    // doors; NO turbine / generator). Blower speed is the power-control
+    // actuator. radiatorUaWperK is sized in state.js so the radiator rejects
+    // ~nominal power at the init coolant-salt temperature (steady intermediate
+    // loop). Below coolantLiquidusK the coolant salt freezes (flow blocks);
+    // freeze-protection heaters hold it above freezeProtectSetpointK.
+    msrRadiator: {
+      airInletTempK: 300,
+      coolantLiquidusK: 727,          // ~454 °C — coolant-salt liquidus
+      freezeProtectSetpointK: 783,    // ~510 °C — freeze-heater setpoint
+      freezeHeaterPowerW: 3.0e5,
+    },
+    // MSR-A — fuel-salt pump + pump bowl (the gas space where off-gas sparging
+    // happens, Wave B). designSaltMassKg is the circulating fuel-salt charge.
+    msrPumpBowl: { designSaltMassKg: 4500, bowlGasVolumeM3: 0.1 },
+    // MSR-B — off-gas system (helium sparge → charcoal-bed holdup). The strip
+    // rate is T.xenonOffGasRateS; this block adds charcoal-bed dynamics.
+    msrOffGas: { charcoalFillTauSec: 6e5, charcoalBeds: 3 },
+    // MSR-B — sealed inert reactor-cell containment (the MSR analog).
+    msrCell: { baselineP: 0.09, coolerUaWperK: 3e4, sinkK: 311, thermalMassJperK: 5e7,
+               highTempWarnK: 420 },
+    // MSR-C — fuel-salt chemistry (redox U⁴⁺/U³⁺ + corrosion). Slow inventory.
+    // Rates are accelerated relative to the real years-long process so the
+    // redox drift / corrosion is observable in a sandbox session.
+    msrChem: { oxidationRatePerS: 1e-3, reductantRatePerS: 5e-3,
+               corrosionThreshold: 1.5, corrosionRatePerS: 2e-3,
+               redoxWarnRatio: 1.8, corrosionWarnIndex: 1.0 },
     // MSRE had one regulating rod; we start it slightly inserted so the LAR
     // can move both directions. Doppler is enormous here (-110 pcm/K) so the
     // open-loop is already very stable — gains stay conservative to avoid

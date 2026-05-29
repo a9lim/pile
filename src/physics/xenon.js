@@ -39,7 +39,11 @@ export function xenonEquilibrium(phi, offGas = 0) {
 
 export function stepXenon(state, dt) {
   const N = state.N;
-  const offGas = state.T.xenonOffGasRateS ?? 0;
+  // MSR-B — the off-gas subsystem gates the strip rate; loss of off-gas lets
+  // ¹³⁵Xe build back up. Falls back to the static type rate (PWR/RBMK: 0).
+  const offGas = state.msrOffGas
+    ? (state.msrOffGas.xeRemovalRateS ?? 0)
+    : (state.T.xenonOffGasRateS ?? 0);
 
   for (let k = 0; k < N; k++) {
     const phi = state.flux[k];

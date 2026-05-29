@@ -427,10 +427,74 @@ function stepRbmkPlant(state, dt) {
   const chokedFlowRated = T.nominalPowerMWth * 1e6 / hFg;
   const turbineSteamFlow = state.turbineValve * chokedFlowRated * (state.sgSecondaryP / T.sgSecondaryPressureMPa);
 
-  // Drum pressure dynamics
+  // Wave-D — pressure-tube break (LOCA). Vents circuit water/steam: drains the
+  // affected loop's drum (below), depressurizes the circuit, and sends steam to
+  // the ALS suppression pool. Zero unless cmd.rbmkPipeBreak → init unchanged.
+  const breakActive = !!state.cmd.rbmkPipeBreak;
+  const breakLoop = state.cmd.rbmkPipeBreakLoop ?? 0;
+  const breakFlow = breakActive ? (T.rbmkBreak?.breakFlowKgPerS ?? 500) : 0;
+  // (ALS reads the break steam directly — see rbmk-als.js — because it runs
+  // before stepPlant in the step order.)
+
+  // Drum pressure dynamics. (A pressure-tube break's primary modeled effects
+  // are the affected-loop drum drain below + steam to the ALS + ECCS
+  // actuation on the break signal; the crude lumped drum-pressure model is
+  // dominated by the concurrent power transient, so an explicit break
+  // depressurization term is deferred to the cleanup pass.)
   const dP = (steamMassRateKgPerS - turbineSteamFlow) * 0.0001;
   state.sgSecondaryP += dP * dt / 5;
   state.sgSecondaryP = clamp(state.sgSecondaryP, 0.1, 10);
+
+  // Wave-B — per-loop drum-separator level control. Each loop's drum loses the
+  // steam drawn to the turbine (apportioned by that loop's share of total
+  // flow) and gains feedwater from a 3-element-style controller (steam-flow
+  // feedforward + level PI). Total feedwater (fwTotal) replaces the wave-1
+  // turbineSteamFlow term in the core-inlet blend below; at init the
+  // controller feedforward == steam draw so fwTotal == turbineSteamFlow and
+  // the blend (state._coolantReturnT) is unchanged — critical-by-construction.
+  // A feedwater trip (cmd.mainFwTrip) zeroes feedwater → level drains →
+  // lowDrumLevel SCRAM, and the lost cold makeup heats the core inlet.
+  const drumC = T.rbmkDrum;
+  let fwTotal = turbineSteamFlow;          // wave-1 fallback if no drum config
+  if (drumC && state.loops) {
+    // Feedwater stops on operator trip OR loss of the main FW pumps (Wave C:
+    // AC-powered, so a station blackout also kills feedwater).
+    const fwTripped = !!state.cmd.mainFwTrip
+      || (state.rbmkAux && state.rbmkAux.mfwAvailable === false);
+    const L0 = drumC.levelSetpoint ?? 0.5;
+    const span = drumC.designWaterMassKg ?? 100000;
+    let totalFlow = 0;
+    for (const lp of state.loops) if (!lp.isolated) totalFlow += lp.massFlowKgPerS || 0;
+    totalFlow = Math.max(totalFlow, 1e-6);
+    fwTotal = 0;
+    for (const lp of state.loops) {
+      if (lp.isolated) { lp.steamFlowKgPerS = 0; lp.fwFlowKgPerS = 0; continue; }
+      const frac = (lp.massFlowKgPerS || 0) / totalFlow;
+      const steamDraw = turbineSteamFlow * frac;               // this loop's steam out
+      lp.steamFlowKgPerS = steamDraw;
+      const err = L0 - lp.drumLevel;                           // +ve when level low
+      // PI feedwater demand, feedforward on steam draw. Anti-windup: only
+      // integrate while not clamped.
+      let fwDemand = steamDraw + (drumC.fwKp ?? 2500) * err + (drumC.fwKi ?? 60) * lp.fwIntegral;
+      if (fwTripped) fwDemand = 0;
+      const fwMax = drumC.maxFwKgPerS ?? 4000;
+      const fw = fwDemand < 0 ? 0 : (fwDemand > fwMax ? fwMax : fwDemand);
+      if (!fwTripped && fw > 0 && fw < fwMax) lp.fwIntegral += err * dt;
+      lp.fwFlowKgPerS = fw;
+      // Wave-B — ECCS makeup (rbmk-eccs.js) is additional cold inflow to this
+      // loop's drum. Zero unless ECCS is actuated → init unchanged.
+      const eccsIn = lp.eccsInjectionKgPerS || 0;
+      fwTotal += fw + eccsIn;
+      // Wave-D — pressure-tube break drains the affected loop's drum.
+      const breakOut = (breakFlow > 0 && lp.id === breakLoop) ? breakFlow : 0;
+      // Drum water balance: dLevel = (feedwater + ECCS − steam − break) / span.
+      lp.drumLevel = clamp(lp.drumLevel + (fw + eccsIn - steamDraw - breakOut) / span * dt, 0, 1);
+    }
+    // Aggregate (min) drum level for the RPS level trips + legacy readers.
+    let minLvl = Infinity;
+    for (const lp of state.loops) if (!lp.isolated && lp.drumLevel < minLvl) minLvl = lp.drumLevel;
+    state.sgSecondaryLevel = Number.isFinite(minLvl) ? minLvl : (L0);
+  }
 
   // Feedwater return: cold (at feedwater temp ~165°C). Mixed with separator
   // water at sat temp. III.10 — feedwater temperature is a real variable
@@ -440,10 +504,11 @@ function stepRbmkPlant(state, dt) {
   // 165°C, so the wave-1 blend temperature is preserved bit-for-bit.
   const T_fw = state.feedwater ? state.feedwater.tempK : (165 + 273.15);
   const T_sat = saturationTempK(state.sgSecondaryP);
-  // Roughly: returning water is a mix of fresh feedwater (mass=turbineSteamFlow returning from condenser)
-  // and recirculated separator water (mass = mFlow - steamMassRate).
+  // Returning water is a mix of fresh feedwater (mass = fwTotal, from the
+  // Wave-B drum controller; == turbineSteamFlow at init) and recirculated
+  // separator water (mass = mFlow − steamMassRate, at sat temp).
   const recircRate = Math.max(mFlow - steamMassRateKgPerS, 0);
-  const blendTemp = (recircRate * T_sat + turbineSteamFlow * T_fw) / Math.max(recircRate + turbineSteamFlow, 1);
+  const blendTemp = (recircRate * T_sat + fwTotal * T_fw) / Math.max(recircRate + fwTotal, 1);
   state._coolantReturnT = blendTemp;
 
   const turbineEff = 0.31;
@@ -465,30 +530,47 @@ function stepMsrPlant(state, dt) {
   const Tint = state.intermediateLoopT;
   const retainedSalt = clamp(1 - (state.msrDrainFrac ?? 0), 0, 1);
   const Q_ihx = retainedSalt * T.intermediateLoopHt * (Tprim - Tint);
-  // Intermediate loop heats steam generator (lumped)
-  const Q_sg = T.sgPrimaryToSecondaryHt * Math.max(Tint - 480, 0);  // 480 K reference cold leg of intermediate
 
-  // Intermediate loop temperature evolution: m·c·dT/dt = Q_ihx - Q_sg
-  const mInt = 2000; // kg of intermediate salt (estimate)
+  // MSR-A — air-cooled radiator heat rejection (replaces the SG/turbine; the
+  // real MSRE dumped 8 MWth to atmosphere). Blower speed × open doors set the
+  // air-side conductance. Below the coolant-salt liquidus the salt freezes and
+  // flow blocks (no rejection); freeze-protection heaters hold it above the
+  // setpoint. The primary return below is UNCHANGED (Q_ihx identical) so the
+  // primary-side init criticality is preserved.
+  const rad = state.msrRadiator;
+  let Q_rad = 0, Q_heater = 0;
+  if (rad) {
+    const rc = T.msrRadiator;
+    rad.coolantSaltFrozen = Tint < (rc.coolantLiquidusK ?? 727);
+    const blower = clamp(state.cmd.msrBlowerSpeed ?? 1, 0, 1.5);
+    const bypass = clamp(state.cmd.msrBypassDoors ?? 0, 0, 1);
+    const airK = rad.airInletTempK;
+    Q_rad = rad.coolantSaltFrozen ? 0
+      : rad.uaWperK * blower * (1 - bypass) * Math.max(Tint - airK, 0);
+    rad.freezeHeaterOn = state.cmd.msrFreezeHeaterTrip !== true
+      && Tint < (rc.freezeProtectSetpointK ?? 783);
+    Q_heater = rad.freezeHeaterOn ? (rc.freezeHeaterPowerW ?? 3e5) : 0;
+    rad.heatRejectedMW = Q_rad / 1e6;
+    rad.coolantSaltTempK = Tint;
+    rad.airOutletTempK = airK + (Q_rad > 0 ? 60 * blower * (1 - bypass) : 0);
+  }
+
+  // Coolant-salt (intermediate) loop: m·c·dT/dt = Q_ihx + Q_heater − Q_rad.
+  const mInt = 2000; // kg of coolant salt (estimate)
   const cInt = 1500;
-  state.intermediateLoopT += (Q_ihx - Q_sg) / (mInt * cInt) * dt;
+  state.intermediateLoopT += (Q_ihx + Q_heater - Q_rad) / (mInt * cInt) * dt;
 
-  // Primary return: simple drop based on Q_ihx and flow.
+  // Primary return: simple drop based on Q_ihx and flow. UNCHANGED.
   // II.3 — regime-aware flow from circulation.js.
   const mFlow = state.out.flowMassRateKgPerS
     ?? (T.coolantMassFlowKgPerS * state.coolantFlowFrac);
   const dropC = Q_ihx / Math.max(mFlow * T.heatCapCoolant, 1);
   state._coolantReturnT = Tprim - dropC;
 
-  // Steam generator → turbine (simplified)
-  const hFg = 1.5e6;
-  const chokedFlowRated = T.nominalPowerMWth * 1e6 / hFg;
-  const turbineSteamFlow = state.turbineValve * chokedFlowRated;
-  const turbineEff = 0.44; // MSR runs HOT, high Carnot ceiling
-  state.out.generatorMWe = (Q_sg / 1e6) * turbineEff * state.turbineValve;
-  state.sgSecondaryP = clamp(state.sgSecondaryP + 0, 0.1, 10);
-
-  pidValveControl(state, dt);
+  // No turbine / generator — heat goes to the air radiator.
+  state.out.generatorMWe = 0;
+  state.out.heatRejectedMW = Q_rad / 1e6;
+  state.sgSecondaryP = clamp(state.sgSecondaryP, 0.1, 10);
 
   // Freeze plug check
   const minLoopT = Math.min(state._coolantReturnT, Tprim);

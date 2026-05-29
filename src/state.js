@@ -546,6 +546,15 @@ export function createState(reactorTypeId = 'pwr') {
       // this cooling (or explicit operator melt) starts gravity drain.
       freezePlugCoolingAvailable: true,
       meltFreezePlug: false,
+      // MSR-A — air-radiator controls. Blower speed is the power-control
+      // actuator; bypass doors + freeze-heater trip are for freeze protection.
+      msrBlowerSpeed: 1.0,
+      msrBypassDoors: 0,            // 0 = full flow through radiator, 1 = full bypass
+      msrFreezeHeaterTrip: false,
+      // MSR-B — off-gas sparge trip (loss → xenon builds back up).
+      msrOffGasTrip: false,
+      // MSR-C — redox control (add reductant to pull the salt back in-band).
+      msrRedoxControl: false,
       // III.14 — EDG operator commands.
       // edgManualStart[i]: bypasses LOOP-driven auto-start (surveillance
       //   testing without simulating LOOP).
@@ -667,6 +676,23 @@ export function createState(reactorTypeId = 'pwr') {
       //   maintenance scenarios. Default all loops running, none isolated.
       rcpRunning: new Array(T.loopCount ?? 0).fill(true),
       loopIsolated: new Array(T.loopCount ?? 0).fill(false),
+      // Wave-A — RBMK MCP fast-trip + standby-start (fields carried; standby
+      // auto-start wired in a later wave). Wave-B — DREG diesel fault / manual
+      // start, one per diesel. Sized from T.rbmkElectrical.dgCount.
+      mcpTrip: new Array(T.loopCount ?? 0).fill(false),
+      mcpStandbyStart: new Array(T.loopCount ?? 0).fill(false),
+      rbmkDgFault: new Array(T.rbmkElectrical?.dgCount ?? 0).fill('none'),
+      rbmkDgManualStart: new Array(T.rbmkElectrical?.dgCount ?? 0).fill(false),
+      // Wave-B — RBMK ECCS manual actuate / reset.
+      rbmkEccsManual: false,
+      rbmkEccsReset: false,
+      // Wave-C — RBMK auxiliary circuit trips.
+      rbmkGasCircuitTrip: false,
+      rbmkCpsCoolingTrip: false,
+      rbmkMfwTrip: false,
+      // Wave-D — pressure-tube break (LOCA) + affected loop index.
+      rbmkPipeBreak: false,
+      rbmkPipeBreakLoop: 0,
       // II.4 — Modal-expansion asymmetry commands. Operator-set rod /
       // boron asymmetry in pcm; drives the per-quadrant tilt and the
       // center-vs-periphery skew through their relaxation ODEs (τ ≈
@@ -756,6 +782,7 @@ export function createState(reactorTypeId = 'pwr') {
       // equilibrium the prompt fraction plus decay fraction sums to nominal.
       totalCorePowerMW: T.nominalPowerMWth,
       generatorMWe: T.nominalPowerMWe,
+      heatRejectedMW: 0,           // MSR-A — air-radiator heat rejection (MWth)
       periodSec: Infinity,
       reactivityPcm: 0,
       // I.1 — Per-loop temperature instrumentation. All in K internally; the
@@ -940,7 +967,11 @@ export function createState(reactorTypeId = 'pwr') {
       // spread of per-loop flow normalized by mean — 0 when symmetric,
       // grows when an RCP trips or a loop is isolated. Both null for
       // RBMK/MSR (single-loop). Populated each step by updateLoopOutputs.
-      rcsMassFrac: T.loopCount ? 1.0 : null,
+      // rcsMassFrac is the PWR tracked-RCS-liquid-inventory readout (seal
+      // LOCA / ECCS). RBMK now has loopCount:2 but no such tracked inventory,
+      // so gate on PWR topology, not loopCount. loopFlowSpreadFrac IS
+      // meaningful for RBMK (left/right MCP asymmetry) → keep on loopCount.
+      rcsMassFrac: T.primaryTopology === 'pwr' ? 1.0 : null,
       loopFlowSpreadFrac: T.loopCount ? 0 : null,
 
       // III.17 — Containment readouts. Populated each step by containment.js
@@ -1059,6 +1090,25 @@ export function createState(reactorTypeId = 'pwr') {
     // are kept alive as loop-averages so rps/chf/afw/mimic/gauges read
     // them unchanged. Built below from T.loopCount.
     loops: null,
+    // Wave-B — RBMK auxiliary AC + DREG diesels + TG rundown. Built below
+    // from T.rbmkElectrical; null for PWR/MSR (rbmk-electrical.js early-returns).
+    rbmkElectrical: null,
+    // Wave-B — RBMK ECCS + Accident Localization System. Built below; null
+    // for PWR/MSR. _rbmkAlsSteamInflowKgPerS / _rbmkEccsPoolDrawKgPerS are
+    // per-step coupling accumulators (reset in sim.js).
+    rbmkEccs: null,
+    rbmkAls: null,
+    rbmkAux: null,
+    _rbmkAlsSteamInflowKgPerS: 0,
+    _rbmkEccsPoolDrawKgPerS: 0,
+    // MSR-A — air-cooled radiator + fuel pump/bowl. Built below; null otherwise.
+    msrRadiator: null,
+    msrPumpBowl: null,
+    // MSR-B — off-gas system + reactor-cell containment. Built below.
+    msrOffGas: null,
+    msrCell: null,
+    // MSR-C — fuel-salt chemistry (redox + corrosion). Built below.
+    msrChem: null,
     // III.10 — Feedwater heater train (PWR + RBMK; null for MSR). Owned
     // by physics/feedwater-heaters.js post-init. Built below from
     // T.feedwater.
@@ -1081,7 +1131,10 @@ export function createState(reactorTypeId = 'pwr') {
     // "pressurizerWaterMass stands in for RCS mass" stand-in. Null for
     // RBMK/MSR. _rcsExternalFlowKgPerS is reset to 0 at the top of each
     // sim step.
-    rcsMassKg: T.loopCount ? (T.rcsMassDesignKg ?? 219000) : null,
+    // PWR-only tracked RCS liquid inventory. RBMK has loopCount:2 but no
+    // pressurizer/seal/ECCS inventory machinery, so gate on PWR topology
+    // (not loopCount) — RBMK/MSR keep null.
+    rcsMassKg: T.primaryTopology === 'pwr' ? (T.rcsMassDesignKg ?? 219000) : null,
     rcsMassDesignKg: T.rcsMassDesignKg ?? 0,
     _rcsExternalFlowKgPerS: 0,
     // III.17 — Per-step containment coupling accumulators. Reset to 0 at the
@@ -1101,38 +1154,164 @@ export function createState(reactorTypeId = 'pwr') {
   // L pieces — critical-by-construction is preserved.
   if (T.loopCount) {
     const L = T.loopCount;
-    const sgC = T.sg || {};
-    const designMassLoop = (sgC.designWaterMassKg ?? 120000) / L;
-    const designFwLoop = (sgC.designFwKgPerS ?? 0) / L;
     const loops = [];
-    for (let l = 0; l < L; l++) {
-      loops.push({
-        id: l,
-        // RCP / flow
-        rcpRunning: true,
-        coastdownFlow: 1.0,            // per-loop II.3 coastdown latch
-        massFlowKgPerS: T.coolantMassFlowKgPerS / L,
-        isolated: false,
-        // Legs
-        tHotK: T.coolantOutletTempK,
-        tColdK: T.coolantInletTempK,
-        // SG (per-loop slice of the wave-2 lumped SG)
-        sgPressureMPa: T.sgSecondaryPressureMPa,
-        sgWaterMassKg: designMassLoop,
-        sgLevel: sgC.levelSetpoint ?? 0.5,
-        sgPrevP: T.sgSecondaryPressureMPa,
-        fwIntegral: 0,
-        fwActual: designFwLoop,
-        // Secondary-side valves (one MSIV + one ADV per loop)
-        msivOpen: true,
-        advPosition: 0,
-        // Heat / steam diagnostics (populated by plant.js each step)
-        qSgW: 0,
-        steamFlowKgPerS: 0,
-        fwFlowKgPerS: designFwLoop,
-      });
+    if (T.primaryTopology === 'direct') {
+      // Wave-A — RBMK two-loop Main Circulation Circuit (left/right core
+      // halves). Each loop carries an equal share of design flow; the summed
+      // flow == coolantMassFlowKgPerS so the COMBINED multichannel void walk
+      // at init is byte-identical to the single-loop lump → void/quality
+      // references snapshot unchanged (critical-by-construction). The core
+      // mesh stays a single shared 1-D axial mesh; these loops are a
+      // plant-side flow split. drumPressureMPa / drumLevel are carried per
+      // loop now for Wave-B per-drum level control, but plant.js still reads
+      // the aggregate state.sgSecondaryP in Wave A. suctionSubcoolK seeds the
+      // MCP cavitation hook (positive at init → derate 1.0).
+      const drumP = T.sgSecondaryPressureMPa;
+      const subcool0 = saturationTempK_init(drumP) - T.coolantInletTempK;
+      for (let l = 0; l < L; l++) {
+        loops.push({
+          id: l,
+          // MCP / flow (consumed by circulation.js multi-loop path)
+          rcpRunning: true,
+          standbyPumpAvailable: true,   // 1 standby MCP/loop — future auto-start
+          coastdownFlow: 1.0,           // per-loop II.3 coastdown latch
+          massFlowKgPerS: T.coolantMassFlowKgPerS / L,
+          isolated: false,
+          cavitating: false,
+          suctionSubcoolK: subcool0,
+          // Drum separator + downcomer return (per loop). drumLevel +
+          // fwIntegral are owned by plant.js's Wave-B level controller.
+          drumPressureMPa: drumP,
+          drumLevel: T.rbmkDrum?.levelSetpoint ?? 0.5,
+          fwIntegral: 0,
+          fwFlowKgPerS: 0,
+          eccsInjectionKgPerS: 0,    // Wave-B: per-half ECCS makeup (rbmk-eccs.js)
+          tColdK: T.coolantInletTempK,
+          steamFlowKgPerS: 0,
+        });
+      }
+    } else {
+      const sgC = T.sg || {};
+      const designMassLoop = (sgC.designWaterMassKg ?? 120000) / L;
+      const designFwLoop = (sgC.designFwKgPerS ?? 0) / L;
+      for (let l = 0; l < L; l++) {
+        loops.push({
+          id: l,
+          // RCP / flow
+          rcpRunning: true,
+          coastdownFlow: 1.0,            // per-loop II.3 coastdown latch
+          massFlowKgPerS: T.coolantMassFlowKgPerS / L,
+          isolated: false,
+          // Legs
+          tHotK: T.coolantOutletTempK,
+          tColdK: T.coolantInletTempK,
+          // SG (per-loop slice of the wave-2 lumped SG)
+          sgPressureMPa: T.sgSecondaryPressureMPa,
+          sgWaterMassKg: designMassLoop,
+          sgLevel: sgC.levelSetpoint ?? 0.5,
+          sgPrevP: T.sgSecondaryPressureMPa,
+          fwIntegral: 0,
+          fwActual: designFwLoop,
+          // Secondary-side valves (one MSIV + one ADV per loop)
+          msivOpen: true,
+          advPosition: 0,
+          // Heat / steam diagnostics (populated by plant.js each step)
+          qSgW: 0,
+          steamFlowKgPerS: 0,
+          fwFlowKgPerS: designFwLoop,
+        });
+      }
     }
     state.loops = loops;
+  }
+  // Wave-B — RBMK auxiliary AC + DREG diesels + TG rundown. All running on
+  // offsite power at init (acAvailable true → circulation not gated).
+  if (T.rbmkElectrical) {
+    const ec = T.rbmkElectrical;
+    const dgUnits = [];
+    for (let i = 0; i < (ec.dgCount ?? 3); i++) {
+      dgUnits.push({ running: false, faulted: false, faultReason: null,
+                     fuelFrac: 1, startTimer: 0 });
+    }
+    state.rbmkElectrical = {
+      offsiteAvailable: true,
+      acAvailable: true,
+      eccsBusEnergized: true,
+      anyDgRunning: false, runningCount: 0, anyDgFaulted: false, lowFuelOil: false,
+      rundownEnergy: 0, rundownActive: false, _rundownPrimed: false,
+      dgUnits,
+    };
+  }
+  // Wave-B — RBMK ECCS + Accident Localization System. Dormant at init.
+  if (T.rbmkEccs) {
+    const ec = T.rbmkEccs;
+    const accumulators = [];
+    for (let i = 0; i < (ec.accumulatorCount ?? 6); i++) {
+      accumulators.push({ inventoryM3: ec.accumulatorVolumeM3 ?? 25, flowing: false });
+    }
+    state.rbmkEccs = {
+      actuated: false, firstActuatedTime: null,
+      accumulators, pumpFlowKgPerS: 0, totalInjectionKgPerS: 0,
+    };
+  }
+  if (T.rbmkAls) {
+    const ac = T.rbmkAls;
+    state.rbmkAls = {
+      compartmentPressureMPa: ac.baselineP ?? 0.1,
+      poolTempK: ac.ultimateSinkK ?? 308,
+      poolInventoryM3: ac.poolInventoryM3 ?? 3000,
+      sprayActive: false,
+    };
+  }
+  // MSR-A — air-cooled radiator + fuel pump/bowl. Radiator UA sized so it
+  // rejects ~nominal power at the init coolant-salt temperature → the
+  // intermediate loop sits near steady at init (the primary-side reactivity
+  // references are unaffected regardless — Q_ihx is unchanged by the sink swap).
+  if (T.msrRadiator) {
+    const rc = T.msrRadiator;
+    const airK = rc.airInletTempK ?? 300;
+    const dT = Math.max(intermediateLoopT - airK, 1);
+    state.msrRadiator = {
+      uaWperK: (T.nominalPowerMWth * 1e6) / dT,
+      coolantSaltTempK: intermediateLoopT,
+      airInletTempK: airK,
+      airOutletTempK: airK,
+      heatRejectedMW: 0,
+      coolantSaltFrozen: false,
+      freezeHeaterOn: false,
+    };
+  }
+  if (T.msrPumpBowl) {
+    state.msrPumpBowl = {
+      saltMassKg: T.msrPumpBowl.designSaltMassKg ?? 4500,
+      levelFrac: 0.5,
+      gasSpaceM3: T.msrPumpBowl.bowlGasVolumeM3 ?? 0.1,
+    };
+  }
+  // MSR-B — off-gas (rate matches T.xenonOffGasRateS at init so the equilibrium
+  // xenon built above stays consistent) + sealed reactor-cell containment.
+  if (T.msrOffGas) {
+    state.msrOffGas = {
+      available: true,
+      xeRemovalRateS: T.xenonOffGasRateS ?? 0,
+      charcoalLoadingFrac: 0.1,
+    };
+  }
+  if (T.msrCell) {
+    const cc = T.msrCell;
+    state.msrCell = { tempK: cc.sinkK ?? 311, pressureMPa: cc.baselineP ?? 0.09 };
+  }
+  if (T.msrChem) {
+    state.msrChem = { redoxRatio: 1.0, corrosionIndex: 0, reductantOn: false };
+  }
+  // Wave-C — RBMK auxiliary circuits. All nominal at init (no extra graphite
+  // heat → critical-by-construction).
+  if (T.rbmkAux) {
+    state.rbmkAux = {
+      gasCoolingOk: true, graphiteCoolingFactor: 1, avgGraphiteTempK: T.coolantInletTempK,
+      cpsCoolingOk: true, scramSpeedFactor: 1,
+      mfwAvailable: true,
+    };
   }
   // III.10 — Feedwater heater train. Built for PWR + RBMK (T.feedwater
   // defined); null for MSR (no feedwater system → feedwater-heaters.js and

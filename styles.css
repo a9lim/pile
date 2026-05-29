@@ -224,6 +224,15 @@ body {
 }
 .sch-core-cell { stroke: none; }
 .sch-shape-core { fill: var(--bg); }
+/* Stroke-only silhouette accents (tube lines, radiator fins, pump discharge
+   nub, generator terminal box, drum end-caps). */
+.sch-detail {
+  fill: none;
+  stroke: var(--text-secondary);
+  stroke-width: 1.5;
+  opacity: 0.55;
+  pointer-events: none;
+}
 .sch-comp.alarm .sch-readout { fill: var(--scram); }
 
 /* ─── Component inspector dock — centred modal panel ───────────────── */
