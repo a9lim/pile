@@ -4,12 +4,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pile | a9l.im</title>
+  <title>Pile — Interactive Nuclear Reactor Simulator | a9l.im</title>
   <meta name="description"
-    content="Semi-realistic nuclear reactor simulator. Three reactor types — PWR, RBMK, MSR — sharing 1D axial neutronics, thermal feedback, xenon, decay heat, burnup, and coupled plant safety systems.">
+    content="Operate PWR, RBMK-1000, and molten-salt reactor models with axial kinetics, xenon, plant systems, faults, procedures, and guided scenarios.">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
   <meta property="og:title" content="Pile — Interactive Nuclear Reactor Simulator">
-  <meta property="og:description" content="Run a PWR, RBMK-1000, or molten salt reactor in your browser. Axial neutronics, xenon, decay heat, burnup, plant systems, trips, and PWR procedures.">
+  <meta property="og:description" content="Operate PWR, RBMK-1000, and molten-salt reactor models with axial kinetics, xenon, plant systems, faults, procedures, and guided scenarios.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://a9l.im/pile">
   <meta property="og:site_name" content="a9l.im">
@@ -24,7 +24,7 @@
   <meta name="twitter:creator" content="@_a9lim">
   <meta property="og:locale" content="en_US">
   <meta name="twitter:title" content="Pile — Interactive Nuclear Reactor Simulator">
-  <meta name="twitter:description" content="Three reactor types in one engine: axial neutronics, xenon, decay heat, burnup, plant safety systems, and a PWR fault/procedure deck.">
+  <meta name="twitter:description" content="Operate PWR, RBMK-1000, and molten-salt reactor models with axial kinetics, xenon, plant systems, faults, procedures, and guided scenarios.">
   <meta name="author" content="a9lim">
   <link rel="icon" href="/favicon.ico">
   <meta name="theme-color" content="#E11107">
@@ -59,7 +59,7 @@
     "@type": ["WebApplication", "LearningResource"],
     "name": "Pile",
     "url": "https://a9l.im/pile",
-    "description": "Semi-realistic nuclear reactor simulator with three reactor types (PWR, RBMK-1000, MSR), 1D axial point-kinetics with six delayed-neutron precursor groups per node, thermal feedback via Doppler and moderator temperature coefficients, iodine-xenon dynamics, burnup-dependent coefficients, ANS-5.1 decay heat, IAPWS-IF97 saturation temperatures, coupled plant safety systems, reactor protection and warning channels, and a PWR fault/procedure deck.",
+    "description": "Operate PWR, RBMK-1000, and molten-salt reactor models with axial kinetics, xenon, plant systems, faults, procedures, and guided scenarios.",
     "keywords": "nuclear reactor simulator, point kinetics, xenon poisoning, decay heat, PWR, RBMK, molten salt reactor, reactor protection system, ECCS, containment",
     "about": [
       {"@type": "Thing", "@id": "https://www.wikidata.org/wiki/Q80877", "name": "nuclear reactor"},
@@ -103,7 +103,7 @@
       {"@type": "AlignmentObject", "alignmentType": "educationalSubject", "targetName": "NGSS HS-PS3: Energy", "targetUrl": "https://www.nextgenscience.org/dci-arrangement/hs-ps3-energy"}
     ],
     "datePublished": "2026-05-13",
-    "dateModified": "2026-05-17",
+    "dateModified": "2026-07-16",
     "license": "https://www.gnu.org/licenses/agpl-3.0.html",
     "codeRepository": "https://github.com/a9lim/a9lim.github.io",
     "sameAs": "https://github.com/a9lim/a9lim.github.io",
@@ -271,7 +271,7 @@
       <p>Pile is an interactive nuclear reactor simulator for comparing how different reactor designs respond to the same operator actions. It is not a licensing-grade safety code. The core model is deliberately compact: one axial dimension, six delayed-neutron precursor groups per node, a semi-analytical point-kinetics update, lumped fuel/clad/coolant heat capacities, iodine-135 and xenon-135 inventories, burnup-dependent coefficients, and ANS-5.1-style decay heat. That compact model is coupled to plant systems so transients are not just scripted gauges. A turbine trip changes heat extraction, which changes coolant temperature, which feeds back into reactivity. A seal leak reduces RCS inventory, which changes pressurizer level, which can actuate SI, which drains RWST inventory and eventually asks for sump recirculation.</p>
 
       <h3>Reactor Types</h3>
-      <p>The PWR mode represents a Westinghouse-class four-loop pressurized water reactor. It has strongly negative Doppler and moderator feedback, soluble boron through CVCS, a dynamic pressurizer, four steam generators, AFW, ECCS, EDGs, DC batteries, switchyard relays, containment sprays and fan coolers, spent-fuel-pool cooling, and a staged turbine-generator. The RBMK mode represents a graphite-moderated pressure-tube reactor with boiling water, direct-cycle steam, graphite moderator feedback, a low-power positive void coefficient, separated steam mass quality and void fraction, and graphite-tipped control rods. The MSR mode represents an MSRE-scale fuel-salt reactor with fuel dissolved in FLiBe, circulating delayed-neutron precursors, xenon off-gas removal, an intermediate salt loop, and a freeze plug that drains salt into a passively cooled drain tank when plug cooling is lost or the loop goes hot and stagnant.</p>
+      <p>The PWR mode uses a Westinghouse four-loop reference design collapsed to one representative primary loop and steam generator. It has strongly negative Doppler and moderator feedback, soluble boron through CVCS, a dynamic pressurizer, AFW, ECCS, EDGs, DC batteries, switchyard relays, containment sprays and fan coolers, spent-fuel-pool cooling, and a staged turbine-generator. The RBMK mode represents a graphite-moderated pressure-tube reactor with boiling water, direct-cycle steam, graphite moderator feedback, a low-power positive void coefficient, separated steam mass quality and void fraction, graphite-tipped control rods, and two modeled plant loops whose physical pump groups are collapsed into running and standby equivalents. The MSR mode represents an MSRE-scale fuel-salt reactor with fuel dissolved in FLiBe, circulating delayed-neutron precursors, xenon off-gas removal, an intermediate salt loop, and a freeze plug that drains salt into a passively cooled drain tank when plug cooling is lost or the loop goes hot and stagnant.</p>
 
       <h3>Initial State</h3>
       <p>The simulator starts from hot full-power equilibrium, not from a clean fresh core. Delayed neutron precursors, iodine, xenon, decay-heat groups, burnup, and RBMK operating void are initialized to realistic operating inventories. Each of those effects is then snapshotted as a reactivity reference, so the default reactor is critical by construction without erasing the inventory. This matters pedagogically: after a power reduction, xenon moves relative to a real full-power equilibrium; after a scram, decay heat remains as the residual heat source; during normal full-power operation, total core heat is nominal rather than fission power plus a second copy of equilibrium decay heat.</p>
