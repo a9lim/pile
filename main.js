@@ -243,7 +243,7 @@ if (window.initAboutPanel) {
     ],
     shortcuts,
     repo: 'https://github.com/a9lim/a9lim.github.io',
-    lastUpdated: '2026-07-16',
+    lastUpdated: '2026-07-17',
   });
 }
 

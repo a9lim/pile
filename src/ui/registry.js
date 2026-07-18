@@ -1233,7 +1233,7 @@ function buildMsr() {
       fields: [
         ro('Intermediate loop T', s => FMT.tempC(s.intermediateLoopT)),
         ro('Core outlet T', s => FMT.tempC(s.T_coolant[s.N - 1])),
-        note('Isolates the radioactive fuel salt from the steam plant via a clean intermediate salt loop.'),
+        note('Isolates the radioactive fuel salt from the air-radiator heat sink through a clean intermediate coolant-salt loop.'),
       ],
     },
   });
