@@ -12,10 +12,10 @@ Named for Chicago Pile-1 (Fermi, 2 December 1942).
 
 ## Run locally
 
-Serve from the parent directory so absolute paths to shared modules resolve:
+Build from the parent repository root and serve `dist/` so absolute paths to shared modules resolve:
 
 ```bash
-cd path/to/a9lim.github.io && python -m http.server
+cd path/to/a9lim.github.io && npm run build && python -m http.server --directory dist
 ```
 
 Then visit `http://localhost:8000/pile/`.

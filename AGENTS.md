@@ -4,14 +4,14 @@ Part of the **a9l.im** portfolio. See root `AGENTS.md` for the shared design sys
 
 ## Rules
 
-- Always prefer shared modules (`shared-*.js`, `shared-base.css`) over project-specific reimplementations. UI code uses shared via `window.*` globals. **Physics code stays UI-decoupled** — keep small helpers (e.g. inline `clamp`) in physics modules so they run cleanly under node for unit testing.
+- Always prefer shared modules (`shared-*.js`, `shared/base.css`) over project-specific reimplementations. UI code uses shared via `window.*` globals. **Physics code stays UI-decoupled** — keep small helpers (e.g. inline `clamp`) in physics modules so they run cleanly under node for unit testing.
 - Do not manually test via browser automation. The user tests changes themselves.
 - For wave order and known-deferred items, see `HANDOFF.md`.
 
 ## Running Locally
 
 ```bash
-cd path/to/a9lim.github.io && python -m http.server     # static-only
+cd path/to/a9lim.github.io && npm run build && python -m http.server --directory dist     # static-only
 cd path/to/a9lim.github.io && ./dev.sh                  # full Worker behavior
 ```
 
@@ -242,8 +242,8 @@ pile/
 
 ## What's Wired to the Site
 
-- `/pile/*` excluded from the Worker via `_routes.json` → served as static; `_headers` has Early Hints + CDN caching for `/pile/*`.
-- Canonical portfolio-card data lives in root `content/projects/pile.md`; `_build.mjs` generates `src/projects.js`, `_content.generated.mjs`, and the root ItemList JSON-LD from it.
-- `about.md` is the canonical Pile SEO summary. Root `_build.mjs` synchronizes its metadata into `index.html`, root discovery files, and sitemap output.
+- The parent build stages this submodule at `dist/pile/`, so Workers Static Assets serves existing `/pile/*` files before the Worker. Parent `static/_headers` owns Early Hints and CDN caching.
+- Canonical portfolio-card data lives in parent `content/projects/pile.md`; `tools/build.mjs` generates `dist/src/projects.js`, `.build/content.generated.mjs`, and the root ItemList JSON-LD from it.
+- `about.md` is the canonical Pile SEO summary. The parent build synchronizes its metadata into the staged `dist/pile/index.html`, discovery files, and sitemap output without editing this submodule.
 - Included in `sitemap-main.xml`, `llms.txt`, `llms-full.txt`, the root ItemList JSON-LD, and SPA prefetch rules after a root build.
-- OG image: source `og/pile.html` → `pile/og-image.webp` (run `node og/generate.js`).
+- OG image: parent source `tools/og/pile.html` → `projects/pile/og-image.webp` (run `node tools/og/generate.js` from the parent).
