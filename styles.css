@@ -58,6 +58,7 @@ body {
 
 .reactor-type-row .mode-btn {
   font-family: var(--font-sans);
+  font-variation-settings: var(--fvs-prose);
   font-weight: 600;
   letter-spacing: 0.06em;
   padding: 8px 12px;
@@ -107,6 +108,7 @@ body {
   display: block;
   cursor: grab;
   font-family: var(--font-sans);
+  font-variation-settings: var(--fvs-prose);
 }
 #schematic.grabbing { cursor: grabbing; }
 
@@ -136,6 +138,7 @@ body {
 }
 #zoom-pct {
   font-family: var(--font-mono);
+  font-variation-settings: var(--fvs-mono);
   font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
@@ -217,6 +220,7 @@ body {
 .sch-readout {
   fill: var(--text-secondary);
   font-family: var(--font-mono);
+  font-variation-settings: var(--fvs-mono);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   text-anchor: middle;
@@ -273,6 +277,7 @@ body {
 }
 .insp-title {
   font-family: var(--font-sans);
+  font-variation-settings: var(--fvs-prose);
   font-weight: 700;
   font-size: var(--font-base);
   letter-spacing: 0.04em;
@@ -288,6 +293,7 @@ body {
 
 .insp-group {
   font-family: var(--font-sans);
+  font-variation-settings: var(--fvs-prose);
   font-size: var(--font-sm);
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -314,6 +320,7 @@ body {
 .insp-label { color: var(--text-secondary); }
 .insp-val {
   font-family: var(--font-mono);
+  font-variation-settings: var(--fvs-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--text);
@@ -349,6 +356,7 @@ body {
 }
 .insp-ctrl-val {
   font-family: var(--font-mono);
+  font-variation-settings: var(--fvs-mono);
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
@@ -400,6 +408,7 @@ button.scram-action {
   background: var(--scram);
   color: var(--text-on-accent, #fff);
   font-family: var(--font-sans);
+  font-variation-settings: var(--fvs-prose);
   font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.2em;
@@ -467,6 +476,7 @@ button.scram-action.flash { animation: scram-flash 0.3s var(--ease-out); }
 .strip-label {
   color: var(--text-secondary);
   font-family: var(--font-sans);
+  font-variation-settings: var(--fvs-prose);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-weight: 600;
@@ -474,6 +484,7 @@ button.scram-action.flash { animation: scram-flash 0.3s var(--ease-out); }
 .strip-value {
   color: var(--text);
   font-family: var(--font-mono);
+  font-variation-settings: var(--fvs-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
