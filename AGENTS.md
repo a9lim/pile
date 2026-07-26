@@ -246,4 +246,4 @@ pile/
 - Canonical portfolio-card data lives in parent `content/projects/pile.md`; `tools/build.mjs` generates `dist/src/projects.js`, `.build/content.generated.mjs`, and the root ItemList JSON-LD from it.
 - `about.md` is the canonical Pile SEO summary. The parent build synchronizes its metadata into the staged `dist/pile/index.html`, discovery files, and sitemap output without editing this submodule.
 - Included in `sitemap-main.xml`, `llms.txt`, `llms-full.txt`, the root ItemList JSON-LD, and SPA prefetch rules after a root build.
-- Social previews use the parent site's default `/og-image.webp?v=20260725`; only major simulations own bespoke OG cards.
+- Social previews use the parent site's default `/og-image.webp?v=20260725b`; only major simulations own bespoke OG cards.
