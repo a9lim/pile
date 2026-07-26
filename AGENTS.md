@@ -220,7 +220,7 @@ Reactor-type-specific: PWR 0.5/s (~2 s full insertion), RBMK 0.05/s (~21 s — t
 
 ```
 pile/
-  index.html, main.js, colors.js, styles.css, og-image.webp
+  index.html, main.js, colors.js, styles.css
   AGENTS.md, CLAUDE.md (= @AGENTS.md), README.md, HANDOFF.md, about.md, LICENSE
   test_round5.mjs, test_round6.mjs, test_round7.mjs, test_audit_fixes.mjs
   test_rbmk_wavea.mjs (two-loop MCC), test_rbmk_waveb.mjs (drum-level + electrical/DREG + ECCS + ALS),
@@ -246,4 +246,4 @@ pile/
 - Canonical portfolio-card data lives in parent `content/projects/pile.md`; `tools/build.mjs` generates `dist/src/projects.js`, `.build/content.generated.mjs`, and the root ItemList JSON-LD from it.
 - `about.md` is the canonical Pile SEO summary. The parent build synchronizes its metadata into the staged `dist/pile/index.html`, discovery files, and sitemap output without editing this submodule.
 - Included in `sitemap-main.xml`, `llms.txt`, `llms-full.txt`, the root ItemList JSON-LD, and SPA prefetch rules after a root build.
-- OG image: parent source `tools/og/pile.html` → `projects/pile/og-image.webp` (run `node tools/og/generate.js` from the parent).
+- Social previews use the parent site's default `/og-image.webp`; only major simulations own bespoke OG cards.
